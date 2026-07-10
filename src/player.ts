@@ -8,6 +8,7 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import type { InputSource, InputState } from './input';
 import type { World3D } from './world';
 import type { Prop, PropManager } from './objects';
+import { sfx } from './sound';
 
 const CAPSULE_HALF = 0.42;
 const CAPSULE_R = 0.34;
@@ -26,8 +27,11 @@ export class Player {
   private joint: RAPIER.ImpulseJoint | null = null;
   private targetYaw = 0;
   score = 0;
-  /** 최근 라운드 제출물 이름 (HUD) */
   frozen = false;
+  /** 바닥 왁스칠 이벤트 — 조향이 잘 안 듣는다 */
+  slippery = false;
+  /** 잡기 가능한 프롭 아래 표시되는 링 */
+  private indicator: THREE.Mesh;
 
   constructor(
     public id: number,
@@ -53,6 +57,20 @@ export class Player {
 
     this.buildMesh();
     world.scene.add(this.group);
+
+    this.indicator = new THREE.Mesh(
+      new THREE.RingGeometry(0.42, 0.55, 24),
+      new THREE.MeshBasicMaterial({
+        color: PLAYER_COLORS[this.id],
+        transparent: true,
+        opacity: 0.75,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+      }),
+    );
+    this.indicator.rotation.x = -Math.PI / 2;
+    this.indicator.visible = false;
+    world.scene.add(this.indicator);
   }
 
   private buildMesh() {
@@ -119,7 +137,7 @@ export class Player {
     const len = Math.hypot(input.moveX, input.moveZ) || 1;
     const tx = (input.moveX / len) * MOVE_SPEED * Math.min(len, 1);
     const tz = (input.moveZ / len) * MOVE_SPEED * Math.min(len, 1);
-    const blend = 0.18;
+    const blend = this.slippery ? 0.03 : 0.18;
     this.body.setLinvel(
       { x: lv.x + (tx - lv.x) * blend, y: lv.y, z: lv.z + (tz - lv.z) * blend },
       true,
@@ -145,11 +163,26 @@ export class Player {
     const r = this.body.rotation();
     this.group.position.set(t.x, t.y, t.z);
     this.group.quaternion.set(r.x, r.y, r.z, r.w);
+
+    // 그랩 가능 표시 링
+    if (!this.held && !this.frozen) {
+      const candidate = this.propMgr.findGrabbable(this.handWorld, this.id);
+      if (candidate) {
+        const cp = candidate.position;
+        this.indicator.position.set(cp.x, 0.04 + this.id * 0.012, cp.z);
+        this.indicator.visible = true;
+      } else {
+        this.indicator.visible = false;
+      }
+    } else {
+      this.indicator.visible = false;
+    }
   }
 
   private tryGrab() {
     const prop = this.propMgr.findGrabbable(this.handWorld, this.id);
     if (!prop) return;
+    sfx.grab();
     const params = RAPIER.JointData.spherical(
       { x: HAND_LOCAL.x, y: HAND_LOCAL.y, z: HAND_LOCAL.z },
       { x: 0, y: 0, z: 0 },
@@ -163,6 +196,7 @@ export class Player {
     const prop = this.held;
     if (!prop) return;
     this.release();
+    sfx.throw();
     // 무거울수록 느리게 날아간다
     const mass = prop.body.mass();
     const speed = Math.max(5, 13 - mass * 0.006);
@@ -185,6 +219,7 @@ export class Player {
 
   /** 던진 물건에 맞음 — 들고 있던 물건 낙하 + 넉백 */
   onHit(fromDir: THREE.Vector3) {
+    sfx.bonk();
     this.release();
     const kb = fromDir.clone().setY(0).normalize().multiplyScalar(900);
     this.body.applyImpulse({ x: kb.x, y: 350, z: kb.z }, true);

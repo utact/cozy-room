@@ -8,9 +8,13 @@ import { InputManager, type InputSource } from './input';
 import { UI } from './ui';
 import { createJudge, winnerComment, type JudgeEntry } from './judge';
 import { pickTopics, type Topic } from './topics';
+import { pickEvent, type EventCtx, type RoundEvent } from './events';
+import { sfx } from './sound';
 
-const TOPIC_TIME = 3.5;
-const SCRAMBLE_TIME = 25;
+// ?fast — 개발·시연용 단축 라운드
+const FAST = new URLSearchParams(location.search).has('fast');
+const TOPIC_TIME = FAST ? 1.5 : 3.5;
+const SCRAMBLE_TIME = FAST ? 6 : 25;
 const ROUNDS = 3;
 const FIXED_DT = 1 / 60;
 
@@ -36,6 +40,8 @@ export class Game {
   private stateTime = 0;
   private round = 0;
   private topics: Topic[] = [];
+  private event: RoundEvent | null = null;
+  private lastBeepSec = -1;
   private accumulator = 0;
   private lastTime = performance.now();
   private restartRequested = false;
@@ -126,8 +132,19 @@ export class Game {
     this.beginRound();
   }
 
+  private get eventCtx(): EventCtx {
+    return {
+      world: this.world,
+      players: this.players,
+      props: this.props,
+      pulse: (text) => this.ui.pulseEvent(text),
+    };
+  }
+
   private beginRound() {
     this.round++;
+    this.event = pickEvent(this.round);
+    this.lastBeepSec = -1;
     this.props.scatter();
     this.players.forEach((p, i) => {
       p.frozen = false;
@@ -144,13 +161,27 @@ export class Game {
 
   private tickTopic(dt: number) {
     this.tickGameplay(dt);
-    if (this.stateTime >= TOPIC_TIME) this.setState('scramble');
+    if (this.stateTime >= TOPIC_TIME) {
+      this.setState('scramble');
+      this.ui.minifyTopic();
+      if (this.event) {
+        this.event.start(this.eventCtx);
+        this.ui.showEvent(this.event.title, this.event.desc);
+      }
+    }
   }
 
   private tickScramble(dt: number) {
     this.tickGameplay(dt);
+    this.event?.tick?.(this.eventCtx, dt);
     const remain = SCRAMBLE_TIME - this.stateTime;
     this.ui.setTimer(Math.max(0, remain));
+    // 마지막 5초 카운트다운 비프
+    const sec = Math.ceil(remain);
+    if (sec <= 5 && sec >= 1 && sec !== this.lastBeepSec) {
+      this.lastBeepSec = sec;
+      sfx.tick();
+    }
     if (remain <= 0) this.buzzer();
   }
 
@@ -214,6 +245,12 @@ export class Game {
   // ── 버저 → AI 심사 ──
   private async buzzer() {
     this.setState('judging');
+    sfx.buzzer();
+    if (this.event) {
+      this.event.end(this.eventCtx);
+      this.event = null;
+    }
+    this.ui.hideEvent();
     this.ui.setTimer(null);
     this.ui.hideTopic();
     for (const p of this.players) p.frozen = true;
@@ -234,6 +271,7 @@ export class Game {
       const p = this.players[v.playerId];
       const entry = entries.find((e) => e.playerId === v.playerId)!;
       p.score += v.score;
+      sfx.reveal(v.score);
       this.ui.addVerdict(
         PLAYER_NAMES[v.playerId], PLAYER_COLORS[v.playerId],
         entry.item?.name ?? null, v.score, v.comment,
@@ -251,6 +289,7 @@ export class Game {
 
   private showResults() {
     this.setState('results');
+    sfx.fanfare();
     this.ui.setHud(null);
     const rows = [...this.players]
       .sort((a, b) => b.score - a.score)

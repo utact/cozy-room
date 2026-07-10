@@ -14,6 +14,7 @@ export class World3D {
   renderer: THREE.WebGLRenderer;
   physics: RAPIER.World;
   eventQueue: RAPIER.EventQueue;
+  floorCollider!: RAPIER.Collider;
 
   constructor(container: HTMLElement) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -84,7 +85,7 @@ export class World3D {
     rug.receiveShadow = true;
     this.scene.add(rug);
     const floorBody = this.physics.createRigidBody(RAPIER.RigidBodyDesc.fixed());
-    this.physics.createCollider(
+    this.floorCollider = this.physics.createCollider(
       RAPIER.ColliderDesc.cuboid(ROOM_W / 2, 0.15, ROOM_D / 2).setTranslation(0, -0.15, 0).setFriction(0.9),
       floorBody,
     );

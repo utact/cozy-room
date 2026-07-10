@@ -90,6 +90,14 @@ function pick<T>(arr: T[], rng: () => number): T {
   return arr[Math.floor(rng() * arr.length)];
 }
 
+/** 같은 심사에서 같은 문장이 두 번 나오지 않도록 사용 이력을 피해 뽑기 */
+function pickFresh(arr: string[], rng: () => number, used: Set<string>): string {
+  const fresh = arr.filter((t) => !used.has(t));
+  const chosen = pick(fresh.length > 0 ? fresh : arr, rng);
+  used.add(chosen);
+  return chosen;
+}
+
 function fill(template: string, name: string, item: string): string {
   return template.replaceAll('{name}', name).replaceAll('{item}', item);
 }
@@ -98,19 +106,20 @@ export class LocalJudge implements Judge {
   constructor(private rng: () => number = Math.random) {}
 
   async judge(payload: JudgePayload): Promise<JudgeResult> {
+    const used = new Set<string>();
     const verdicts: JudgeVerdict[] = payload.entries.map((entry) => {
       if (!entry.item) {
         return {
           playerId: entry.playerId,
           score: 3 + Math.floor(this.rng() * 10),
-          comment: fill(pick(EMPTY_TEMPLATES, this.rng), entry.playerName, ''),
+          comment: fill(pickFresh(EMPTY_TEMPLATES, this.rng, used), entry.playerName, ''),
         };
       }
       const score = this.scoreItem(payload.topic, entry.item);
       return {
         playerId: entry.playerId,
         score,
-        comment: this.comment(entry, score),
+        comment: this.comment(entry, score, used),
       };
     });
     return { verdicts };
@@ -125,10 +134,10 @@ export class LocalJudge implements Judge {
     return Math.max(0, Math.min(100, Math.round(score)));
   }
 
-  private comment(entry: JudgeEntry, score: number): string {
+  private comment(entry: JudgeEntry, score: number, used: Set<string>): string {
     const item = entry.item!;
     const pool = score >= 70 ? HIGH_TEMPLATES : score >= 40 ? MID_TEMPLATES : LOW_TEMPLATES;
-    let comment = fill(pick(pool, this.rng), entry.playerName, item.name);
+    let comment = fill(pickFresh(pool, this.rng, used), entry.playerName, item.name);
     // 태그 기반 추임새를 확률적으로 앞에 붙여 다양성 확보
     const quipTag = item.tags.find((t) => TAG_QUIPS[t]);
     if (quipTag && this.rng() < 0.45) {

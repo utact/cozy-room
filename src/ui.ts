@@ -30,6 +30,25 @@ const CSS = `
 .topic-banner.hidden { transform: translateX(-50%) translateY(-30px) scale(.8); opacity: 0; }
 .topic-banner .label { display: block; font-size: 13px; font-weight: 700; opacity: .8;
   letter-spacing: 3px; margin-bottom: 4px; }
+.topic-banner.mini { left: 16px; top: 14px; transform: none; max-width: 32vw;
+  padding: 8px 18px; font-size: 16px; border-radius: 12px; }
+.topic-banner.mini .label { display: none; }
+
+.event-banner { position: absolute; top: 13%; left: 50%; transform: translateX(-50%);
+  padding: 12px 28px; border-radius: 14px; text-align: center;
+  background: linear-gradient(135deg, #7b5cd6, #4a3aa8); box-shadow: 0 8px 30px rgba(0,0,0,.45);
+  transition: transform .3s cubic-bezier(.2,1.6,.4,1), opacity .3s; }
+.event-banner.hidden { transform: translateX(-50%) scale(.7); opacity: 0; pointer-events: none; }
+.event-banner .ev-title { font-size: 24px; font-weight: 900; }
+.event-banner .ev-desc { font-size: 14px; opacity: .85; margin-top: 2px; }
+.event-banner.pulse { animation: evpulse .5s; }
+@keyframes evpulse { 30% { transform: translateX(-50%) scale(1.12); } }
+
+.confetti { position: absolute; top: -8vh; font-size: 26px; pointer-events: none;
+  animation: confetti-fall linear forwards; }
+@keyframes confetti-fall {
+  to { transform: translateY(120vh) rotate(720deg); opacity: .7; }
+}
 
 .timer { position: absolute; top: 3%; left: 50%; transform: translateX(-50%);
   font-size: 44px; font-weight: 900; text-shadow: 0 4px 14px rgba(0,0,0,.6);
@@ -94,6 +113,7 @@ export class UI {
   private judgeEl!: HTMLDivElement;
   private judgeList!: HTMLDivElement;
   private resultsEl!: HTMLDivElement;
+  private eventEl!: HTMLDivElement;
 
   constructor(container: HTMLElement) {
     const style = document.createElement('style');
@@ -132,6 +152,7 @@ export class UI {
     this.topicEl = this.el('div', 'topic-banner hidden', this.root);
     this.timerEl = this.el('div', 'timer hidden', this.root);
     this.hudEl = this.el('div', 'hud hidden', this.root);
+    this.eventEl = this.el('div', 'event-banner hidden', this.root);
   }
 
   private buildJudge() {
@@ -167,13 +188,36 @@ export class UI {
 
   // ── 라운드 ──
   showTopic(round: number, totalRounds: number, text: string) {
-    this.topicEl.classList.remove('hidden');
+    this.topicEl.classList.remove('hidden', 'mini');
     this.topicEl.innerHTML = `<span class="label">ROUND ${round}/${totalRounds}</span>${text}`;
     requestAnimationFrame(() => this.topicEl.classList.remove('hidden'));
   }
 
+  /** 난투 시작 후 주제를 좌상단 미니 배너로 축소 (시야 확보) */
+  minifyTopic() {
+    this.topicEl.classList.add('mini');
+  }
+
   hideTopic() {
     this.topicEl.classList.add('hidden');
+  }
+
+  // ── 라운드 이벤트 ──
+  showEvent(title: string, desc: string) {
+    this.eventEl.classList.remove('hidden');
+    this.eventEl.innerHTML = `<div class="ev-title">${title}</div><div class="ev-desc">${desc}</div>`;
+    setTimeout(() => this.eventEl.classList.add('hidden'), 3200);
+  }
+
+  pulseEvent(text: string) {
+    this.eventEl.innerHTML = `<div class="ev-title">${text}</div>`;
+    this.eventEl.classList.remove('hidden', 'pulse');
+    requestAnimationFrame(() => this.eventEl.classList.add('pulse'));
+    setTimeout(() => this.eventEl.classList.add('hidden'), 900);
+  }
+
+  hideEvent() {
+    this.eventEl.classList.add('hidden');
   }
 
   setTimer(sec: number | null) {
@@ -246,5 +290,19 @@ export class UI {
     });
     this.el('div', 'winner-comment', this.resultsEl, `“${comment}”`);
     this.el('div', 'start-hint', this.resultsEl, 'R 키를 눌러 다시하기');
+    this.dropConfetti();
+  }
+
+  private dropConfetti() {
+    const emojis = ['🎉', '🎊', '⭐', '🛋️', '🏆', '✨'];
+    for (let i = 0; i < 44; i++) {
+      const span = document.createElement('span');
+      span.className = 'confetti';
+      span.textContent = emojis[Math.floor(Math.random() * emojis.length)];
+      span.style.left = `${Math.random() * 100}vw`;
+      span.style.animationDuration = `${2.2 + Math.random() * 2.4}s`;
+      span.style.animationDelay = `${Math.random() * 1.6}s`;
+      this.resultsEl.appendChild(span);
+    }
   }
 }
