@@ -2,8 +2,9 @@
 
 import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
-import { PROP_CATALOG, type PropMeta } from './catalog';
+import { PROP_CATALOG, type PropMeta, type PropShape } from './catalog';
 import { ROOM_W, ROOM_D, type World3D } from './world';
+import type { AssetLibrary } from './assets';
 
 const THROWN_WINDOW = 1.6; // 이 시간 안에 상대를 맞히면 '뺏기' 성립 (초)
 
@@ -17,7 +18,7 @@ export class Prop {
     public meta: PropMeta,
     public body: RAPIER.RigidBody,
     public collider: RAPIER.Collider,
-    public mesh: THREE.Mesh,
+    public mesh: THREE.Object3D,
   ) {}
 
   get position(): THREE.Vector3 {
@@ -26,14 +27,35 @@ export class Prop {
   }
 }
 
-function buildGeometry(meta: PropMeta): THREE.BufferGeometry {
-  const [sx, sy, sz] = meta.size;
-  switch (meta.shape) {
+function buildGeometry(shape: PropShape, size: [number, number, number]): THREE.BufferGeometry {
+  const [sx, sy, sz] = size;
+  switch (shape) {
     case 'box': return new THREE.BoxGeometry(sx, sy, sz);
     case 'ball': return new THREE.SphereGeometry(sx, 18, 14);
     case 'cylinder': return new THREE.CylinderGeometry(sx, sx, sy * 2, 18);
     case 'cone': return new THREE.ConeGeometry(sx, sy * 2, 18);
   }
+}
+
+/** parts 조합 또는 단일 프리미티브로 프롭 비주얼 생성 */
+function buildProceduralVisual(meta: PropMeta): THREE.Object3D {
+  const makeMesh = (shape: PropShape, size: [number, number, number], color: number) => {
+    const mesh = new THREE.Mesh(
+      buildGeometry(shape, size),
+      new THREE.MeshStandardMaterial({ color, roughness: 0.7 }),
+    );
+    mesh.castShadow = mesh.receiveShadow = true;
+    return mesh;
+  };
+  if (!meta.parts) return makeMesh(meta.shape, meta.size, meta.color);
+  const group = new THREE.Group();
+  for (const part of meta.parts) {
+    const mesh = makeMesh(part.shape, part.size, part.color ?? meta.color);
+    mesh.position.set(...part.pos);
+    if (part.rot) mesh.rotation.set(...part.rot);
+    group.add(mesh);
+  }
+  return group;
 }
 
 function buildColliderDesc(meta: PropMeta): RAPIER.ColliderDesc {
@@ -57,7 +79,7 @@ export class PropManager {
   /** collider handle → Prop 역참조 (충돌 이벤트 매핑용) */
   byCollider = new Map<number, Prop>();
 
-  constructor(private world: World3D, rng: () => number = Math.random) {
+  constructor(private world: World3D, private assets: AssetLibrary, rng: () => number = Math.random) {
     // 카탈로그 전체 1개씩 + 랜덤 중복 몇 개로 물량 확보
     const metas: PropMeta[] = [...PROP_CATALOG];
     for (let i = 0; i < 6; i++) {
@@ -75,11 +97,8 @@ export class PropManager {
         .setAngularDamping(0.4),
     );
     const collider = this.world.physics.createCollider(buildColliderDesc(meta), body);
-    const mesh = new THREE.Mesh(
-      buildGeometry(meta),
-      new THREE.MeshStandardMaterial({ color: meta.color, roughness: 0.7 }),
-    );
-    mesh.castShadow = mesh.receiveShadow = true;
+    // 생성형 3D GLB가 있으면 사용, 없으면 절차적 비주얼
+    const mesh = this.assets.instantiate(meta) ?? buildProceduralVisual(meta);
     this.world.scene.add(mesh);
     const prop = new Prop(meta, body, collider, mesh);
     this.props.push(prop);

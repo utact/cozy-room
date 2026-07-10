@@ -32,6 +32,7 @@ export class Player {
   slippery = false;
   /** 잡기 가능한 프롭 아래 표시되는 링 */
   private indicator: THREE.Mesh;
+  private arms: THREE.Mesh[] = [];
 
   constructor(
     public id: number,
@@ -104,6 +105,16 @@ export class Player {
     );
     hand.position.set(HAND_LOCAL.x, HAND_LOCAL.y, HAND_LOCAL.z);
     this.group.add(hand);
+    // 짤막한 팔 — 물건을 들면 앞으로 올라간다
+    const armMat = new THREE.MeshStandardMaterial({ color, roughness: 0.6 });
+    for (const side of [-1, 1]) {
+      const arm = new THREE.Mesh(new THREE.CapsuleGeometry(0.085, 0.24, 4, 10), armMat);
+      arm.castShadow = true;
+      arm.position.set(side * (CAPSULE_R + 0.06), 0.12, 0.02);
+      arm.rotation.z = side * 0.55;
+      this.group.add(arm);
+      this.arms.push(arm);
+    }
   }
 
   get position(): THREE.Vector3 {
@@ -163,6 +174,16 @@ export class Player {
     const r = this.body.rotation();
     this.group.position.set(t.x, t.y, t.z);
     this.group.quaternion.set(r.x, r.y, r.z, r.w);
+
+    // 팔 자세 — 들고 있으면 앞으로 뻗기
+    for (let i = 0; i < this.arms.length; i++) {
+      const side = i === 0 ? -1 : 1;
+      const targetX = this.held ? -1.15 : 0;
+      const targetZ = this.held ? side * 0.15 : side * 0.55;
+      const arm = this.arms[i];
+      arm.rotation.x += (targetX - arm.rotation.x) * 0.2;
+      arm.rotation.z += (targetZ - arm.rotation.z) * 0.2;
+    }
 
     // 그랩 가능 표시 링
     if (!this.held && !this.frozen) {

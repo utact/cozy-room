@@ -1,10 +1,12 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { Game } from './game';
+import { AssetLibrary } from './assets';
 
 async function boot() {
-  await RAPIER.init();
+  const assets = new AssetLibrary();
+  await Promise.all([RAPIER.init(), assets.load()]);
   const container = document.getElementById('app')!;
-  new Game(container).start();
+  new Game(container, assets).start();
 }
 
 boot().catch((err) => {

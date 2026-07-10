@@ -10,6 +10,7 @@ import { createJudge, winnerComment, type JudgeEntry } from './judge';
 import { pickTopics, type Topic } from './topics';
 import { pickEvent, type EventCtx, type RoundEvent } from './events';
 import { sfx } from './sound';
+import type { AssetLibrary } from './assets';
 
 // ?fast — 개발·시연용 단축 라운드
 const FAST = new URLSearchParams(location.search).has('fast');
@@ -46,9 +47,9 @@ export class Game {
   private lastTime = performance.now();
   private restartRequested = false;
 
-  constructor(container: HTMLElement) {
+  constructor(container: HTMLElement, assets: AssetLibrary) {
     this.world = new World3D(container);
-    this.props = new PropManager(this.world);
+    this.props = new PropManager(this.world, assets);
     this.ui = new UI(container);
     window.addEventListener('keydown', (e) => {
       if (e.code === 'KeyR') this.restartRequested = true;
