@@ -1,0 +1,137 @@
+/** 프롭 스폰·물리 동기화·그랩 후보 탐색·던짐 상태 관리 */
+
+import * as THREE from 'three';
+import RAPIER from '@dimforge/rapier3d-compat';
+import { PROP_CATALOG, type PropMeta } from './catalog';
+import { ROOM_W, ROOM_D, type World3D } from './world';
+
+const THROWN_WINDOW = 1.6; // 이 시간 안에 상대를 맞히면 '뺏기' 성립 (초)
+
+export class Prop {
+  thrownBy = -1; // 던진 플레이어 id (-1 = 없음)
+  thrownTimer = 0;
+  /** 현재 이 프롭을 잡고 있는 플레이어 id 집합 (동시 그랩 = 줄다리기) */
+  heldBy = new Set<number>();
+
+  constructor(
+    public meta: PropMeta,
+    public body: RAPIER.RigidBody,
+    public collider: RAPIER.Collider,
+    public mesh: THREE.Mesh,
+  ) {}
+
+  get position(): THREE.Vector3 {
+    const t = this.body.translation();
+    return new THREE.Vector3(t.x, t.y, t.z);
+  }
+}
+
+function buildGeometry(meta: PropMeta): THREE.BufferGeometry {
+  const [sx, sy, sz] = meta.size;
+  switch (meta.shape) {
+    case 'box': return new THREE.BoxGeometry(sx, sy, sz);
+    case 'ball': return new THREE.SphereGeometry(sx, 18, 14);
+    case 'cylinder': return new THREE.CylinderGeometry(sx, sx, sy * 2, 18);
+    case 'cone': return new THREE.ConeGeometry(sx, sy * 2, 18);
+  }
+}
+
+function buildColliderDesc(meta: PropMeta): RAPIER.ColliderDesc {
+  const [sx, sy, sz] = meta.size;
+  let desc: RAPIER.ColliderDesc;
+  switch (meta.shape) {
+    case 'box': desc = RAPIER.ColliderDesc.cuboid(sx / 2, sy / 2, sz / 2); break;
+    case 'ball': desc = RAPIER.ColliderDesc.ball(sx); break;
+    case 'cylinder': desc = RAPIER.ColliderDesc.cylinder(sy, sx); break;
+    case 'cone': desc = RAPIER.ColliderDesc.cone(sy, sx); break;
+  }
+  return desc
+    .setDensity(meta.density * 400) // 사람이 밀 수 있는 스케일로 보정
+    .setFriction(0.75)
+    .setRestitution(0.25)
+    .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS);
+}
+
+export class PropManager {
+  props: Prop[] = [];
+  /** collider handle → Prop 역참조 (충돌 이벤트 매핑용) */
+  byCollider = new Map<number, Prop>();
+
+  constructor(private world: World3D, rng: () => number = Math.random) {
+    // 카탈로그 전체 1개씩 + 랜덤 중복 몇 개로 물량 확보
+    const metas: PropMeta[] = [...PROP_CATALOG];
+    for (let i = 0; i < 6; i++) {
+      metas.push(PROP_CATALOG[Math.floor(rng() * PROP_CATALOG.length)]);
+    }
+    for (const meta of metas) this.spawn(meta);
+    this.scatter(rng);
+  }
+
+  private spawn(meta: PropMeta) {
+    const body = this.world.physics.createRigidBody(
+      RAPIER.RigidBodyDesc.dynamic()
+        .setTranslation(0, 2, 0)
+        .setLinearDamping(0.25)
+        .setAngularDamping(0.4),
+    );
+    const collider = this.world.physics.createCollider(buildColliderDesc(meta), body);
+    const mesh = new THREE.Mesh(
+      buildGeometry(meta),
+      new THREE.MeshStandardMaterial({ color: meta.color, roughness: 0.7 }),
+    );
+    mesh.castShadow = mesh.receiveShadow = true;
+    this.world.scene.add(mesh);
+    const prop = new Prop(meta, body, collider, mesh);
+    this.props.push(prop);
+    this.byCollider.set(collider.handle, prop);
+  }
+
+  /** 라운드 시작 — 프롭 위치를 방 안에 다시 흩뿌림 */
+  scatter(rng: () => number = Math.random) {
+    for (const prop of this.props) {
+      prop.thrownBy = -1;
+      prop.thrownTimer = 0;
+      prop.heldBy.clear();
+      const x = (rng() - 0.5) * (ROOM_W - 3);
+      const z = (rng() - 0.5) * (ROOM_D - 3);
+      const y = 0.8 + rng() * 2.2; // 공중에서 우수수 떨어지는 연출
+      prop.body.setTranslation({ x, y, z }, true);
+      prop.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      prop.body.setAngvel({ x: rng() * 2, y: rng() * 4, z: rng() * 2 }, true);
+    }
+  }
+
+  /** handPos 근처에서 잡을 수 있는 가장 가까운 프롭 */
+  findGrabbable(handPos: THREE.Vector3, excludePlayerId: number, radius = 1.15): Prop | null {
+    let best: Prop | null = null;
+    let bestDist = radius;
+    for (const prop of this.props) {
+      if (prop.heldBy.has(excludePlayerId)) continue;
+      const d = prop.position.distanceTo(handPos);
+      if (d < bestDist) {
+        best = prop;
+        bestDist = d;
+      }
+    }
+    return best;
+  }
+
+  update(dt: number) {
+    for (const prop of this.props) {
+      if (prop.thrownTimer > 0) {
+        prop.thrownTimer -= dt;
+        if (prop.thrownTimer <= 0) prop.thrownBy = -1;
+      }
+      // 물리 → 렌더 동기화
+      const t = prop.body.translation();
+      const r = prop.body.rotation();
+      prop.mesh.position.set(t.x, t.y, t.z);
+      prop.mesh.quaternion.set(r.x, r.y, r.z, r.w);
+    }
+  }
+
+  markThrown(prop: Prop, playerId: number) {
+    prop.thrownBy = playerId;
+    prop.thrownTimer = THROWN_WINDOW;
+  }
+}
