@@ -98,13 +98,6 @@ export class Player {
       pupil.position.set(ex, 0.34, CAPSULE_R * 0.82 + 0.06);
       this.group.add(pupil);
     }
-    // 손 — 그랩 위치 시각화
-    const hand = new THREE.Mesh(
-      new THREE.SphereGeometry(0.11, 10, 8),
-      new THREE.MeshStandardMaterial({ color, roughness: 0.5 }),
-    );
-    hand.position.set(HAND_LOCAL.x, HAND_LOCAL.y, HAND_LOCAL.z);
-    this.group.add(hand);
     // 짤막한 팔 — 물건을 들면 앞으로 올라간다
     const armMat = new THREE.MeshStandardMaterial({ color, roughness: 0.6 });
     for (const side of [-1, 1]) {
@@ -140,19 +133,28 @@ export class Player {
 
   update(dt: number) {
     const input: InputState = this.frozen
-      ? { moveX: 0, moveZ: 0, actionPressed: false, actionHeld: false }
+      ? { moveX: 0, moveZ: 0, actionPressed: false, actionHeld: false, jumpPressed: false }
       : this.source.getState();
 
     // 이동 — 현재 속도를 목표 속도로 서서히 블렌드 (밀침·넉백이 살아있도록)
+    // 왁스칠: 가속·감속이 굼떠지는 대신 최고 속도가 붙는다 (빙판 과속)
     const lv = this.body.linvel();
     const len = Math.hypot(input.moveX, input.moveZ) || 1;
-    const tx = (input.moveX / len) * MOVE_SPEED * Math.min(len, 1);
-    const tz = (input.moveZ / len) * MOVE_SPEED * Math.min(len, 1);
-    const blend = this.slippery ? 0.03 : 0.18;
+    const speed = MOVE_SPEED * (this.slippery ? 1.3 : 1);
+    const tx = (input.moveX / len) * speed * Math.min(len, 1);
+    const tz = (input.moveZ / len) * speed * Math.min(len, 1);
+    const blend = this.slippery ? 0.06 : 0.18;
     this.body.setLinvel(
       { x: lv.x + (tx - lv.x) * blend, y: lv.y, z: lv.z + (tz - lv.z) * blend },
       true,
     );
+
+    // 점프 — 바닥(또는 가구·프롭 위)에 서 있을 때만
+    if (input.jumpPressed && this.isGrounded()) {
+      const v = this.body.linvel();
+      this.body.setLinvel({ x: v.x, y: 5.0, z: v.z }, true);
+      sfx.jump();
+    }
 
     // 조향 — 입력 방향으로 y축 회전 (P 제어)
     if (Math.abs(input.moveX) > 0.01 || Math.abs(input.moveZ) > 0.01) {
@@ -198,6 +200,14 @@ export class Player {
     } else {
       this.indicator.visible = false;
     }
+  }
+
+  /** 발밑 0.9m 안에 뭔가 있으면 접지로 간주 (가구·프롭 위 포함) */
+  private isGrounded(): boolean {
+    const t = this.body.translation();
+    const ray = new RAPIER.Ray({ x: t.x, y: t.y, z: t.z }, { x: 0, y: -1, z: 0 });
+    const hit = this.world.physics.castRay(ray, 0.9, true, undefined, undefined, this.collider, this.body);
+    return hit !== null;
   }
 
   private tryGrab() {

@@ -67,6 +67,7 @@ class Sfx {
   }
 
   grab() { this.tone('sine', 320, 640, 0.09, 0.25); }
+  jump() { this.tone('sine', 240, 520, 0.14, 0.18); }
   throw() { this.noise(0.22, 0.3, 2400); }
   bonk() { this.tone('triangle', 190, 70, 0.16, 0.4); this.noise(0.08, 0.2, 900); }
   tick() { this.tone('square', 880, 880, 0.06, 0.12); }

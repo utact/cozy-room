@@ -24,8 +24,8 @@ export interface RoundEvent {
 
 const slippery: RoundEvent = {
   id: 'slippery',
-  title: '🧼 바닥 왁스칠!',
-  desc: '누가 바닥에 왁스를 칠했다… 브레이크가 없다!',
+  title: '바닥 왁스칠!',
+  desc: '속도는 붙는데 브레이크가 없다… 과속 주의!',
   start(ctx) {
     ctx.world.floorCollider.setFriction(0.02);
     for (const p of ctx.players) p.slippery = true;
@@ -38,7 +38,7 @@ const slippery: RoundEvent = {
 
 const moon: RoundEvent = {
   id: 'moon',
-  title: '🌙 달 중력!',
+  title: '달 중력!',
   desc: '중력이 가출했다. 모든 것이 붕붕 뜬다!',
   start(ctx) {
     ctx.world.physics.gravity = { x: 0, y: -2.6, z: 0 };
@@ -50,7 +50,7 @@ const moon: RoundEvent = {
 
 class WindEvent implements RoundEvent {
   id = 'wind';
-  title = '🌪️ 돌풍 주의보!';
+  title = '돌풍 주의보!';
   desc = '창문을 안 닫았다! 몇 초마다 돌풍이 분다!';
   private timer = 0;
 
@@ -73,7 +73,7 @@ class WindEvent implements RoundEvent {
       prop.body.applyImpulse({ x: dir.x * m * 2.0, y: m * 1.2, z: dir.z * m * 2.0 }, true);
     }
     sfx.gust();
-    ctx.pulse('🌪️ 휘이이잉!');
+    ctx.pulse('휘이이잉!');
   }
 
   end() {}

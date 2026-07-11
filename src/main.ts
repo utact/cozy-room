@@ -6,7 +6,10 @@ async function boot() {
   const assets = new AssetLibrary();
   await Promise.all([RAPIER.init(), assets.load()]);
   const container = document.getElementById('app')!;
-  new Game(container, assets).start();
+  const game = new Game(container, assets);
+  game.start();
+  // 개발·자동화 테스트용 디버그 핸들
+  (window as unknown as Record<string, unknown>).__cozy = game;
 }
 
 boot().catch((err) => {

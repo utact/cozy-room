@@ -4,8 +4,8 @@ import * as THREE from 'three';
 import { World3D } from './world';
 import { PropManager } from './objects';
 import { Player, PLAYER_COLORS, PLAYER_NAMES } from './player';
-import { InputManager, type InputSource } from './input';
-import { UI } from './ui';
+import { InputManager, keyName, type InputSource } from './input';
+import { UI, kbd } from './ui';
 import { createJudge, winnerComment, type JudgeEntry } from './judge';
 import { pickTopics, type Topic } from './topics';
 import { pickEvent, type EventCtx, type RoundEvent } from './events';
@@ -46,14 +46,44 @@ export class Game {
   private accumulator = 0;
   private lastTime = performance.now();
   private restartRequested = false;
+  private rebinding = false;
 
   constructor(container: HTMLElement, assets: AssetLibrary) {
     this.world = new World3D(container);
     this.props = new PropManager(this.world, assets);
     this.ui = new UI(container);
+    this.refreshControlsHint();
     window.addEventListener('keydown', (e) => {
+      if (this.rebinding) return;
       if (e.code === 'KeyR') this.restartRequested = true;
+      if (e.code === 'KeyK' && this.state === 'menu') this.startRebind();
     });
+  }
+
+  private refreshControlsHint() {
+    const [p1, p2] = this.input.schemes;
+    const keys = (s: typeof p1) =>
+      `${kbd(keyName(s.up))}${kbd(keyName(s.left))}${kbd(keyName(s.down))}${kbd(keyName(s.right))} 이동 · ` +
+      `${kbd(keyName(s.action))} 잡기/던지기 · ${kbd(keyName(s.jump))} 점프`;
+    this.ui.setControlsHint(
+      `<b>P1</b> ${keys(p1)}<br/><b>P2</b> ${keys(p2)}<br/>` +
+      `게임패드: 스틱 이동 · A 잡기 · B 점프 (연결하면 자동 인식) &nbsp;|&nbsp; ${kbd('K')} 키 변경`,
+    );
+  }
+
+  private async startRebind() {
+    this.rebinding = true;
+    try {
+      await this.input.rebindScheme(0, (msg) => this.ui.setRebindPrompt(msg));
+      await this.input.rebindScheme(1, (msg) => this.ui.setRebindPrompt(msg));
+      this.ui.setRebindPrompt('저장 완료!');
+    } finally {
+      this.refreshControlsHint();
+      setTimeout(() => {
+        this.ui.setRebindPrompt(null);
+        this.rebinding = false;
+      }, 900);
+    }
   }
 
   start() {
@@ -96,11 +126,13 @@ export class Game {
   private joinedSources = new Set<string>();
 
   private tickMenu() {
-    for (const src of this.input.allSources()) {
-      const st = src.getState();
-      if (st.actionPressed && !this.joinedSources.has(src.id) && this.players.length < 4) {
-        this.joinedSources.add(src.id);
-        this.addPlayer(src);
+    if (!this.rebinding) {
+      for (const src of this.input.allSources()) {
+        const st = src.getState();
+        if (st.actionPressed && !this.joinedSources.has(src.id) && this.players.length < 4) {
+          this.joinedSources.add(src.id);
+          this.addPlayer(src);
+        }
       }
     }
     this.ui.showMenu(
