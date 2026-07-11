@@ -49,7 +49,10 @@ const CSS = `
   font-size: 26px; font-weight: 900; opacity: .4; }
 .joincard .who { font-size: 19px; font-weight: 900; }
 .joincard .src { font-size: 11.5px; opacity: .78; line-height: 1.55; min-height: 34px; }
-.hint { font-size: 14px; opacity: .8; line-height: 2.1; text-align: center; }
+.hint { font-size: 13.5px; line-height: 2.15; text-align: center; color: rgba(255,255,255,.82);
+  background: rgba(15,11,28,.55); padding: 12px 26px; border-radius: 16px;
+  border: 1px solid rgba(255,255,255,.07); }
+.hint b { color: #ffd98c; margin-right: 2px; }
 .start-hint { margin-top: 8px; font-size: 19px; font-weight: 800; color: #ffd98c;
   animation: pulse 1.4s infinite; text-shadow: 0 2px 10px rgba(0,0,0,.5); }
 @keyframes pulse { 50% { opacity: .45; } }
@@ -76,24 +79,32 @@ const CSS = `
 .timer.urgent { color: #ff6b5b; animation: pulse .5s infinite; }
 
 .event-banner { position: absolute; top: 13%; left: 50%; transform: translateX(-50%);
-  padding: 12px 28px; border-radius: 14px; text-align: center;
-  background: linear-gradient(135deg, #7b5cd6, #4a3aa8); box-shadow: 0 8px 30px rgba(0,0,0,.45);
-  border: 2px solid rgba(255,255,255,.2);
+  padding: 13px 34px; border-radius: 16px; text-align: center;
+  background: rgba(15,11,28,.88); backdrop-filter: blur(6px);
+  border: 1px solid rgba(255,255,255,.13); box-shadow: 0 12px 36px rgba(0,0,0,.5);
   transition: transform .3s cubic-bezier(.2,1.6,.4,1), opacity .3s; }
 .event-banner.hidden { transform: translateX(-50%) scale(.7); opacity: 0; pointer-events: none; }
-.event-banner .ev-title { font-size: 24px; font-weight: 900; }
-.event-banner .ev-desc { font-size: 14px; opacity: .85; margin-top: 2px; }
+.event-banner .ev-title { font-size: 23px; font-weight: 900; color: #8ad0ff;
+  text-shadow: 0 0 22px rgba(138,208,255,.55); letter-spacing: -0.5px; }
+.event-banner .ev-desc { font-size: 13.5px; opacity: .75; margin-top: 3px; }
 .event-banner.pulse { animation: evpulse .5s; }
 @keyframes evpulse { 30% { transform: translateX(-50%) scale(1.12); } }
 
 .hud { position: absolute; bottom: 2.5%; left: 50%; transform: translateX(-50%);
-  display: flex; gap: 12px; }
-.chip { min-width: 172px; padding: 10px 16px; border-radius: 14px;
-  background: rgba(20,16,36,.78); border-left: 6px solid #888;
-  display: flex; flex-direction: column; gap: 2px; }
-.chip .row1 { display: flex; justify-content: space-between; font-weight: 800; }
-.chip .item { font-size: 13px; min-height: 17px; font-weight: 600; }
-.chip .item.empty { opacity: .45; font-weight: 400; }
+  display: flex; gap: 10px; }
+.chip { display: flex; align-items: center; gap: 10px; padding: 8px 16px 8px 9px;
+  border-radius: 999px; background: rgba(15,11,28,.82); backdrop-filter: blur(6px);
+  border: 1px solid rgba(255,255,255,.09); }
+.chip .info { display: flex; flex-direction: column; gap: 0; min-width: 92px; }
+.chip .pname { font-size: 12.5px; font-weight: 800; letter-spacing: .3px; }
+.chip .item { font-size: 12.5px; font-weight: 600; }
+.chip .item.empty { opacity: .38; font-weight: 400; }
+.chip .pts { font-size: 17px; font-weight: 900; font-variant-numeric: tabular-nums; }
+.chip .pts small { font-size: 11px; opacity: .6; font-weight: 700; }
+.avatar.mini { width: 27px; height: 34px; border-radius: 14px; }
+.avatar.mini .eye { top: 9px; width: 6px; height: 7px; }
+.avatar.mini .eye::after { bottom: 1px; left: 1.5px; width: 3px; height: 3.5px; }
+.avatar.mini .eye.l { left: 6px; } .avatar.mini .eye.r { right: 6px; }
 
 /* ── 심사 ── */
 .judge-panel { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%);
@@ -136,6 +147,9 @@ const CSS = `
   border: 1px solid rgba(255,255,255,.12); border-bottom: none;
   display: flex; align-items: flex-start; justify-content: center; padding-top: 9px;
   font-weight: 900; font-size: 21px; color: rgba(255,255,255,.65); }
+.pod .stand.r1 { border-top: 4px solid #ffd66b; color: #ffd66b; }
+.pod .stand.r2 { border-top: 4px solid #c8cdd6; color: #c8cdd6; }
+.pod .stand.r3 { border-top: 4px solid #d2905c; color: #d2905c; }
 .also-ran { display: flex; gap: 10px; align-items: center; font-size: 16px; font-weight: 700;
   opacity: .8; margin-top: 4px; }
 .bubble { position: relative; margin-top: 20px; background: #fdf6ec; color: #2c2440;
@@ -168,9 +182,10 @@ function colorHex(c: number): string {
   return `#${c.toString(16).padStart(6, '0')}`;
 }
 
-function avatarHtml(color: number | null): string {
-  if (color === null) return `<div class="avatar ghost"></div>`;
-  return `<div class="avatar" style="background:${colorHex(color)}"><span class="eye l"></span><span class="eye r"></span></div>`;
+function avatarHtml(color: number | null, mini = false): string {
+  const cls = mini ? 'avatar mini' : 'avatar';
+  if (color === null) return `<div class="${cls} ghost"></div>`;
+  return `<div class="${cls}" style="background:${colorHex(color)}"><span class="eye l"></span><span class="eye r"></span></div>`;
 }
 
 export function kbd(text: string): string {
@@ -271,9 +286,9 @@ export class UI {
   }
 
   // ── 라운드 ──
-  showTopic(round: number, totalRounds: number, text: string) {
+  showTopic(round: number, totalRounds: number, text: string, themeName: string) {
     this.topicEl.classList.remove('hidden', 'mini');
-    this.topicEl.innerHTML = `<span class="label">ROUND ${round}/${totalRounds}</span>${text}`;
+    this.topicEl.innerHTML = `<span class="label">ROUND ${round}/${totalRounds} — ${themeName}</span>${text}`;
     requestAnimationFrame(() => this.topicEl.classList.remove('hidden'));
   }
 
@@ -324,12 +339,13 @@ export class UI {
     for (const e of entries) {
       const chip = document.createElement('div');
       chip.className = 'chip';
-      chip.style.borderLeftColor = colorHex(e.color);
       chip.innerHTML =
-        `<div class="row1"><span style="color:${colorHex(e.color)}">${e.name}</span><span>${e.score}점</span></div>` +
+        avatarHtml(e.color, true) +
+        `<div class="info"><span class="pname" style="color:${colorHex(e.color)}">${e.name}</span>` +
         (e.heldName
-          ? `<div class="item">${e.heldName}</div>`
-          : `<div class="item empty">빈손</div>`);
+          ? `<span class="item">${e.heldName}</span>`
+          : `<span class="item empty">빈손</span>`) +
+        `</div><span class="pts">${e.score}<small>점</small></span>`;
       this.hudEl.appendChild(chip);
     }
   }
@@ -379,7 +395,7 @@ export class UI {
         avatarHtml(r.color) +
         `<div class="pname" style="color:${colorHex(r.color)}">${r.name}</div>` +
         `<div class="pscore">${r.score}점</div>` +
-        `<div class="stand" style="height:${standH[rank]}px">${rank + 1}</div>`;
+        `<div class="stand r${rank + 1}" style="height:${standH[rank]}px">${rank + 1}</div>`;
       podium.appendChild(pod);
     }
     // 4위

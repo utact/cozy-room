@@ -10,7 +10,7 @@ class Sfx {
   constructor() {
     const unlock = () => {
       this.ensure();
-      this.ctx?.resume();
+      this.ctx?.resume().then(() => this.startBgm());
     };
     window.addEventListener('keydown', unlock, { once: false });
     window.addEventListener('pointerdown', unlock, { once: false });
@@ -83,6 +83,53 @@ class Sfx {
     const notes = [523, 659, 784, 1047];
     notes.forEach((f, i) => this.tone('triangle', f, f, 0.32, 0.25, i * 0.14));
     this.noise(0.6, 0.12, 3000, 0.5);
+  }
+  rip() {
+    this.noise(0.28, 0.4, 1600);
+    this.tone('sawtooth', 300, 90, 0.35, 0.28, 0.04);
+  }
+
+  // ── BGM: 제너러티브 로파이 루프 (코지룸 무드) ──────────
+  // Cmaj7 → Am7 → Fmaj7 → G7, 88bpm 8분음표 그리드를 룩어헤드 스케줄링.
+  private bgmInterval: ReturnType<typeof setInterval> | null = null;
+  private nextNoteTime = 0;
+  private bgmStep = 0;
+
+  private static CHORDS = [
+    { bass: 130.81, arp: [261.63, 329.63, 392.0, 493.88] },  // Cmaj7
+    { bass: 110.0,  arp: [220.0, 261.63, 329.63, 392.0] },   // Am7
+    { bass: 87.31,  arp: [174.61, 220.0, 261.63, 329.63] },  // Fmaj7
+    { bass: 98.0,   arp: [196.0, 246.94, 293.66, 349.23] },  // G7
+  ];
+
+  startBgm() {
+    const ctx = this.ensure();
+    if (!ctx || this.bgmInterval) return;
+    const stepDur = 60 / 88 / 2; // 8분음표
+    this.nextNoteTime = ctx.currentTime + 0.1;
+    this.bgmInterval = setInterval(() => {
+      if (ctx.state !== 'running') return;
+      while (this.nextNoteTime < ctx.currentTime + 0.35) {
+        this.scheduleBgmStep(this.bgmStep, this.nextNoteTime - ctx.currentTime, stepDur);
+        this.bgmStep = (this.bgmStep + 1) % 32; // 4코드 × 8스텝
+        this.nextNoteTime += stepDur;
+      }
+    }, 120);
+  }
+
+  private scheduleBgmStep(step: number, when: number, stepDur: number) {
+    const chord = Sfx.CHORDS[Math.floor(step / 8) % 4];
+    const inBar = step % 8;
+    if (inBar === 0 || inBar === 5) {
+      this.tone('sine', chord.bass, chord.bass, stepDur * 3.4, 0.085, when);
+    }
+    if (inBar % 2 === 0) {
+      const note = chord.arp[(step / 2 + Math.floor(step / 8)) % 4];
+      this.tone('triangle', note, note, stepDur * 1.6, 0.038, when);
+    }
+    if (inBar === 4) {
+      this.noise(0.05, 0.022, 5200, when); // 옅은 햇
+    }
   }
 }
 

@@ -1,3 +1,4 @@
+import 'pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css';
 import RAPIER from '@dimforge/rapier3d-compat';
 import { Game } from './game';
 import { AssetLibrary } from './assets';

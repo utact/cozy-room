@@ -2,7 +2,7 @@
 
 import * as THREE from 'three';
 import { World3D } from './world';
-import { PropManager } from './objects';
+import { PropManager, type Prop } from './objects';
 import { Player, PLAYER_COLORS, PLAYER_NAMES } from './player';
 import { InputManager, keyName, type InputSource } from './input';
 import { UI, kbd } from './ui';
@@ -51,6 +51,10 @@ export class Game {
   constructor(container: HTMLElement, assets: AssetLibrary) {
     this.world = new World3D(container);
     this.props = new PropManager(this.world, assets);
+    // 프롭 제거 시 잡고 있던 조인트부터 해제 (팔 재장착·수거 안전장치)
+    this.props.beforeDespawn = (prop) => {
+      for (const id of [...prop.heldBy]) this.players[id]?.release();
+    };
     this.ui = new UI(container);
     this.refreshControlsHint();
     window.addEventListener('keydown', (e) => {
@@ -178,12 +182,13 @@ export class Game {
     this.round++;
     this.event = pickEvent(this.round);
     this.lastBeepSec = -1;
+    this.tugs.clear();
     this.props.scatter();
     this.players.forEach((p, i) => {
       p.frozen = false;
       p.resetForRound(SPAWNS[i]);
     });
-    this.ui.showTopic(this.round, ROUNDS, this.currentTopic.text);
+    this.ui.showTopic(this.round, ROUNDS, this.currentTopic.text, this.world.theme.name);
     this.ui.setHud(this.hudEntries());
     this.setState('topic');
   }
@@ -220,9 +225,48 @@ export class Game {
 
   private tickGameplay(dt: number) {
     for (const p of this.players) p.update(dt);
+    this.tickTug(dt);
     this.props.update(dt);
     this.stepPhysics(dt);
     this.ui.setHud(this.hudEntries());
+  }
+
+  // ── 줄다리기 — 동시 그랩 시 이동 입력(버둥거림) 누적이 큰 쪽이 이긴다 ──
+  private tugs = new Map<Prop, { time: number; limit: number; effort: number[] }>();
+
+  private tickTug(dt: number) {
+    for (const prop of this.props.props) {
+      if (prop.heldBy.size < 2) {
+        this.tugs.delete(prop);
+        continue;
+      }
+      let tug = this.tugs.get(prop);
+      if (!tug) {
+        tug = { time: 0, limit: 1.3 + Math.random() * 1.2, effort: [0, 0, 0, 0] };
+        this.tugs.set(prop, tug);
+      }
+      tug.time += dt;
+      for (const id of prop.heldBy) {
+        tug.effort[id] += (this.players[id]?.lastMoveMag ?? 0) * dt + 0.001;
+      }
+      if (tug.time < tug.limit) continue;
+      const holders = [...prop.heldBy];
+      const rolls = holders.map((id) => tug.effort[id] * (0.85 + Math.random() * 0.3));
+      const winner = holders[rolls.indexOf(Math.max(...rolls))];
+      for (const id of holders) {
+        if (id === winner) continue;
+        const loser = this.players[id];
+        loser.release();
+        // 패배의 대가 — 팔이 뜯겨 아이템이 된다
+        const pos = loser.ripArm();
+        if (pos) {
+          this.props.spawnArm(id, PLAYER_NAMES[id], PLAYER_COLORS[id], pos);
+          sfx.rip();
+          this.ui.pulseEvent(`${PLAYER_NAMES[id]}의 팔이 뜯어졌다!`);
+        }
+      }
+      this.tugs.delete(prop);
+    }
   }
 
   private tickPhysicsOnly(dt: number) {

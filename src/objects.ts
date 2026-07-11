@@ -79,11 +79,18 @@ export class PropManager {
   /** collider handle → Prop 역참조 (충돌 이벤트 매핑용) */
   byCollider = new Map<number, Prop>();
 
+  /** 프롭 제거 전 훅 — 잡고 있는 플레이어의 조인트 해제용 (game이 설정) */
+  beforeDespawn: (prop: Prop) => void = () => {};
+
   constructor(private world: World3D, private assets: AssetLibrary, rng: () => number = Math.random) {
-    // 카탈로그 전체 1개씩 + 랜덤 중복 몇 개로 물량 확보
+    // 카탈로그 전체 1개씩 + 테마 가중 프롭 중복으로 물량 확보
     const metas: PropMeta[] = [...PROP_CATALOG];
+    const boosted = PROP_CATALOG.filter((m) =>
+      m.tags.some((t) => world.theme.boostTags.includes(t)),
+    );
+    const extraPool = boosted.length > 0 ? boosted : PROP_CATALOG;
     for (let i = 0; i < 6; i++) {
-      metas.push(PROP_CATALOG[Math.floor(rng() * PROP_CATALOG.length)]);
+      metas.push(extraPool[Math.floor(rng() * extraPool.length)]);
     }
     for (const meta of metas) this.spawn(meta);
     this.scatter(rng);
@@ -105,8 +112,65 @@ export class PropManager {
     this.byCollider.set(collider.handle, prop);
   }
 
-  /** 라운드 시작 — 프롭 위치를 방 안에 다시 흩뿌림 */
+  /** 줄다리기에서 뜯긴 팔을 아이템으로 스폰 */
+  spawnArm(playerId: number, playerName: string, color: number, pos: THREE.Vector3): Prop {
+    const meta: PropMeta = {
+      id: `arm-${playerId}`,
+      name: `${playerName}의 팔`,
+      tags: ['팔', '유머', '섬뜩함', '물귀신'],
+      shape: 'box',
+      size: [0.18, 0.42, 0.18],
+      color,
+      density: 0.5,
+      armOwner: playerId,
+    };
+    const body = this.world.physics.createRigidBody(
+      RAPIER.RigidBodyDesc.dynamic()
+        .setTranslation(pos.x, pos.y + 0.4, pos.z)
+        .setLinearDamping(0.25)
+        .setAngularDamping(0.4),
+    );
+    const collider = this.world.physics.createCollider(
+      RAPIER.ColliderDesc.capsule(0.12, 0.085)
+        .setDensity(200)
+        .setFriction(0.75)
+        .setRestitution(0.35)
+        .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS),
+      body,
+    );
+    // 팔 비주얼 — 캡슐 + 손끝 구
+    const group = new THREE.Group();
+    const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.6 });
+    const limb = new THREE.Mesh(new THREE.CapsuleGeometry(0.085, 0.24, 4, 10), mat);
+    limb.castShadow = true;
+    group.add(limb);
+    const fist = new THREE.Mesh(new THREE.SphereGeometry(0.1, 10, 8), mat);
+    fist.position.y = 0.19;
+    fist.castShadow = true;
+    group.add(fist);
+    this.world.scene.add(group);
+    // 뜯기는 임펄스 — 위로 팝
+    body.setLinvel({ x: (Math.random() - 0.5) * 3, y: 4.2, z: (Math.random() - 0.5) * 3 }, true);
+    body.setAngvel({ x: 6, y: 2, z: 6 }, true);
+    const prop = new Prop(meta, body, collider, group);
+    this.props.push(prop);
+    this.byCollider.set(collider.handle, prop);
+    return prop;
+  }
+
+  despawn(prop: Prop) {
+    this.beforeDespawn(prop);
+    this.byCollider.delete(prop.collider.handle);
+    this.props = this.props.filter((p) => p !== prop);
+    this.world.scene.remove(prop.mesh);
+    this.world.physics.removeRigidBody(prop.body);
+  }
+
+  /** 라운드 시작 — 프롭 위치를 방 안에 다시 흩뿌림. 뜯긴 팔은 수거된다. */
   scatter(rng: () => number = Math.random) {
+    for (const arm of this.props.filter((p) => p.meta.armOwner !== undefined)) {
+      this.despawn(arm);
+    }
     for (const prop of this.props) {
       prop.thrownBy = -1;
       prop.thrownTimer = 0;

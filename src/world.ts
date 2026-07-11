@@ -2,6 +2,7 @@
 
 import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
+import { pickTheme, type RoomTheme } from './themes';
 
 export const ROOM_W = 16; // x
 export const ROOM_D = 12; // z
@@ -15,6 +16,7 @@ export class World3D {
   physics: RAPIER.World;
   eventQueue: RAPIER.EventQueue;
   floorCollider!: RAPIER.Collider;
+  theme: RoomTheme = pickTheme();
 
   constructor(container: HTMLElement) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -48,7 +50,7 @@ export class World3D {
     sun.shadow.camera.top = 12;
     sun.shadow.camera.bottom = -12;
     this.scene.add(sun);
-    const warm = new THREE.PointLight(0xffb86b, 30, 18);
+    const warm = new THREE.PointLight(this.theme.glow, 30, 18);
     warm.position.set(-4, 3, -3);
     this.scene.add(warm);
 
@@ -75,15 +77,18 @@ export class World3D {
   }
 
   private buildRoom() {
-    // 바닥 (러그 느낌 투톤)
-    const floor = new THREE.Mesh(new THREE.BoxGeometry(ROOM_W, 0.3, ROOM_D), this.mat(0x8a6d55));
+    const theme = this.theme;
+    // 바닥 (테마 팔레트)
+    const floor = new THREE.Mesh(new THREE.BoxGeometry(ROOM_W, 0.3, ROOM_D), this.mat(theme.floor));
     floor.position.y = -0.15;
     floor.receiveShadow = true;
     this.scene.add(floor);
-    const rug = new THREE.Mesh(new THREE.BoxGeometry(ROOM_W * 0.55, 0.02, ROOM_D * 0.55), this.mat(0xb0485c));
-    rug.position.y = 0.01;
-    rug.receiveShadow = true;
-    this.scene.add(rug);
+    if (theme.rug !== null) {
+      const rug = new THREE.Mesh(new THREE.BoxGeometry(ROOM_W * 0.55, 0.02, ROOM_D * 0.55), this.mat(theme.rug));
+      rug.position.y = 0.01;
+      rug.receiveShadow = true;
+      this.scene.add(rug);
+    }
     const floorBody = this.physics.createRigidBody(RAPIER.RigidBodyDesc.fixed());
     this.floorCollider = this.physics.createCollider(
       RAPIER.ColliderDesc.cuboid(ROOM_W / 2, 0.15, ROOM_D / 2).setTranslation(0, -0.15, 0).setFriction(0.9),
@@ -91,7 +96,7 @@ export class World3D {
     );
 
     // 벽 — 시각용 낮은 벽 + 물리용 높은 벽
-    const wallColor = 0x5e5378;
+    const wallColor = theme.wall;
     const t = 0.25;
     // 뒤 (카메라 반대편)
     this.staticBox(0, WALL_VISIBLE_H / 2, -ROOM_D / 2 - t, ROOM_W / 2 + t * 2, WALL_VISIBLE_H / 2, t, wallColor);
@@ -105,11 +110,10 @@ export class World3D {
     this.staticBox(ROOM_W / 2 + t, WALL_VISIBLE_H / 2, 0, t, WALL_VISIBLE_H / 2, ROOM_D / 2, wallColor);
     this.staticBox(ROOM_W / 2 + t, WALL_PHYS_H / 2, 0, t, WALL_PHYS_H / 2, ROOM_D / 2);
 
-    // 가구 — 테이블 2개 (프롭이 올라가는 무대)
-    this.staticBox(-4.2, 0.45, -2.8, 1.6, 0.45, 1.0, 0x9a7b4f);
-    this.staticBox(4.5, 0.45, 2.2, 1.2, 0.45, 1.4, 0x9a7b4f);
-    // 소파 (장식 겸 장애물)
-    this.staticBox(0, 0.5, -4.9, 2.2, 0.5, 0.7, 0x7d4b68);
+    // 가구 — 테마별 배치 (프롭이 올라가는 무대 겸 장애물)
+    for (const f of theme.furniture) {
+      this.staticBox(f.x, f.hy, f.z, f.hx, f.hy, f.hz, f.color);
+    }
   }
 
   render() {

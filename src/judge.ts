@@ -77,6 +77,7 @@ const TAG_QUIPS: Record<string, string> = {
   비쌈: '지갑 사정이 느껴지고',
   유머: '웃음은 보장되고',
   한국인: 'K-감성이 넘치고',
+  팔: '사람 팔이 왜 여기서 나오나 싶지만',
 };
 
 const WINNER_TEMPLATES = [

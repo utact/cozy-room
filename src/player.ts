@@ -30,6 +30,10 @@ export class Player {
   frozen = false;
   /** 바닥 왁스칠 이벤트 — 조향이 잘 안 듣는다 */
   slippery = false;
+  /** 줄다리기 패배로 팔이 뜯긴 상태 */
+  armless = false;
+  /** 직전 프레임 이동 입력 크기 — 줄다리기 힘 계산용 */
+  lastMoveMag = 0;
   /** 잡기 가능한 프롭 아래 표시되는 링 */
   private indicator: THREE.Mesh;
   private arms: THREE.Mesh[] = [];
@@ -138,6 +142,7 @@ export class Player {
 
     // 이동 — 현재 속도를 목표 속도로 서서히 블렌드 (밀침·넉백이 살아있도록)
     // 왁스칠: 가속·감속이 굼떠지는 대신 최고 속도가 붙는다 (빙판 과속)
+    this.lastMoveMag = Math.min(Math.hypot(input.moveX, input.moveZ), 1);
     const lv = this.body.linvel();
     const len = Math.hypot(input.moveX, input.moveZ) || 1;
     const speed = MOVE_SPEED * (this.slippery ? 1.3 : 1);
@@ -213,6 +218,13 @@ export class Player {
   private tryGrab() {
     const prop = this.propMgr.findGrabbable(this.handWorld, this.id);
     if (!prop) return;
+    // 내 팔을 되찾으면 재장착 (아이템으로 들지 않는다)
+    if (prop.meta.armOwner === this.id) {
+      this.propMgr.despawn(prop);
+      this.restoreArm();
+      sfx.grab();
+      return;
+    }
     sfx.grab();
     const params = RAPIER.JointData.spherical(
       { x: HAND_LOCAL.x, y: HAND_LOCAL.y, z: HAND_LOCAL.z },
@@ -256,8 +268,22 @@ export class Player {
     this.body.applyImpulse({ x: kb.x, y: 350, z: kb.z }, true);
   }
 
+  /** 줄다리기 패배 — 오른팔이 뜯겨 나간다. 뜯긴 위치를 반환 (이미 없으면 null) */
+  ripArm(): THREE.Vector3 | null {
+    if (this.armless) return null;
+    this.armless = true;
+    this.arms[1].visible = false;
+    return this.position;
+  }
+
+  restoreArm() {
+    this.armless = false;
+    this.arms[1].visible = true;
+  }
+
   resetForRound(spawn: THREE.Vector3) {
     this.release();
+    this.restoreArm();
     this.body.setTranslation({ x: spawn.x, y: spawn.y, z: spawn.z }, true);
     this.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
     this.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
