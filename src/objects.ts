@@ -13,6 +13,8 @@ export class Prop {
   thrownTimer = 0;
   /** 현재 이 프롭을 잡고 있는 플레이어 id 집합 (동시 그랩 = 줄다리기) */
   heldBy = new Set<number>();
+  /** 뜯긴 팔 전용 — 바닥에서 눈에 띄게 하는 오라 링 */
+  aura: THREE.Mesh | null = null;
 
   constructor(
     public meta: PropMeta,
@@ -113,16 +115,17 @@ export class PropManager {
   }
 
   /** 줄다리기에서 뜯긴 팔을 아이템으로 스폰 */
-  spawnArm(playerId: number, playerName: string, color: number, pos: THREE.Vector3): Prop {
+  spawnArm(playerId: number, playerName: string, color: number, pos: THREE.Vector3, side: 'L' | 'R'): Prop {
     const meta: PropMeta = {
-      id: `arm-${playerId}`,
-      name: `${playerName}의 팔`,
+      id: `arm-${playerId}-${side}`,
+      name: `${playerName}의 ${side === 'L' ? '왼팔' : '오른팔'}`,
       tags: ['팔', '유머', '섬뜩함', '물귀신'],
       shape: 'box',
       size: [0.18, 0.42, 0.18],
       color,
       density: 0.5,
       armOwner: playerId,
+      armSide: side,
     };
     const body = this.world.physics.createRigidBody(
       RAPIER.RigidBodyDesc.dynamic()
@@ -149,10 +152,20 @@ export class PropManager {
     fist.castShadow = true;
     group.add(fist);
     this.world.scene.add(group);
+    // 오라 링 — 바닥에서 맥동하며 주인 색으로 빛난다
+    const aura = new THREE.Mesh(
+      new THREE.RingGeometry(0.3, 0.46, 26),
+      new THREE.MeshBasicMaterial({
+        color, transparent: true, opacity: 0.6, side: THREE.DoubleSide, depthWrite: false,
+      }),
+    );
+    aura.rotation.x = -Math.PI / 2;
+    this.world.scene.add(aura);
     // 뜯기는 임펄스 — 위로 팝
     body.setLinvel({ x: (Math.random() - 0.5) * 3, y: 4.2, z: (Math.random() - 0.5) * 3 }, true);
     body.setAngvel({ x: 6, y: 2, z: 6 }, true);
     const prop = new Prop(meta, body, collider, group);
+    prop.aura = aura;
     this.props.push(prop);
     this.byCollider.set(collider.handle, prop);
     return prop;
@@ -163,6 +176,7 @@ export class PropManager {
     this.byCollider.delete(prop.collider.handle);
     this.props = this.props.filter((p) => p !== prop);
     this.world.scene.remove(prop.mesh);
+    if (prop.aura) this.world.scene.remove(prop.aura);
     this.world.physics.removeRigidBody(prop.body);
   }
 
@@ -199,7 +213,10 @@ export class PropManager {
     return best;
   }
 
+  private time = 0;
+
   update(dt: number) {
+    this.time += dt;
     for (const prop of this.props) {
       if (prop.thrownTimer > 0) {
         prop.thrownTimer -= dt;
@@ -210,6 +227,12 @@ export class PropManager {
       const r = prop.body.rotation();
       prop.mesh.position.set(t.x, t.y, t.z);
       prop.mesh.quaternion.set(r.x, r.y, r.z, r.w);
+      // 팔 오라 — 바닥에 붙어 맥동
+      if (prop.aura) {
+        prop.aura.position.set(t.x, 0.05, t.z);
+        const s = 1 + 0.18 * Math.sin(this.time * 5.5);
+        prop.aura.scale.set(s, s, 1);
+      }
     }
   }
 

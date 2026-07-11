@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { ROOM_W, ROOM_D, type World3D } from './world';
 import type { Player } from './player';
-import type { PropManager } from './objects';
+import type { Prop, PropManager } from './objects';
 import { sfx } from './sound';
 
 export interface EventCtx {
@@ -155,9 +155,64 @@ class WindEvent implements RoundEvent {
   }
 }
 
-/** 라운드 1은 평화롭게(조작 학습), 이후 라운드는 랜덤 이벤트 */
+/**
+ * 미스터리 룸 — 모든 프롭이 실루엣으로 변한다.
+ * 한 번이라도 잡은 물건만 정체(색·이름)가 드러난다. 초기 회색 상자 시절의 재미를 모드화.
+ */
+class MysteryEvent implements RoundEvent {
+  id = 'mystery';
+  title = '미스터리 룸!';
+  desc = '물건이 전부 실루엣이다. 직접 잡아야 정체를 안다!';
+  private saved = new Map<THREE.Mesh, THREE.Material | THREE.Material[]>();
+  private cloaked = new Set<Prop>();
+  private silhouette = new THREE.MeshStandardMaterial({ color: 0x232030, roughness: 0.95 });
+
+  start(ctx: EventCtx) {
+    for (const prop of ctx.props.props) {
+      if (prop.meta.armOwner !== undefined) continue; // 팔은 누구 것인지 보여야 한다
+      prop.mesh.traverse((o) => {
+        const mesh = o as THREE.Mesh;
+        if (mesh.isMesh) {
+          this.saved.set(mesh, mesh.material);
+          mesh.material = this.silhouette;
+        }
+      });
+      this.cloaked.add(prop);
+    }
+  }
+
+  tick(ctx: EventCtx) {
+    // 잡는 순간 정체 공개 (이후 계속 공개 상태 유지)
+    for (const prop of ctx.props.props) {
+      if (prop.heldBy.size > 0 && this.cloaked.has(prop)) this.reveal(prop);
+    }
+  }
+
+  private reveal(prop: Prop) {
+    prop.mesh.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (mesh.isMesh && this.saved.has(mesh)) {
+        mesh.material = this.saved.get(mesh)!;
+        this.saved.delete(mesh);
+      }
+    });
+    this.cloaked.delete(prop);
+    sfx.reveal(70);
+  }
+
+  end() {
+    for (const [mesh, mat] of this.saved) mesh.material = mat;
+    this.saved.clear();
+    this.cloaked.clear();
+  }
+}
+
+/** 라운드 1은 평화롭게(조작 학습), 이후 라운드는 랜덤 이벤트. ?event=id 로 강제 가능 */
 export function pickEvent(round: number, rng: () => number = Math.random): RoundEvent | null {
+  const pool: () => RoundEvent[] = () => [slippery, moon, new WindEvent(), new MysteryEvent()];
+  const forced = new URLSearchParams(location.search).get('event');
+  if (forced) return pool().find((e) => e.id === forced) ?? null;
   if (round <= 1) return null;
-  const pool: RoundEvent[] = [slippery, moon, new WindEvent()];
-  return pool[Math.floor(rng() * pool.length)];
+  const events = pool();
+  return events[Math.floor(rng() * events.length)];
 }
