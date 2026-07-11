@@ -10,6 +10,7 @@ import { createJudge, winnerComment, type JudgeEntry } from './judge';
 import { pickTopics, type Topic } from './topics';
 import { pickEvent, type EventCtx, type RoundEvent } from './events';
 import { sfx } from './sound';
+import { BotSource } from './bot';
 import type { AssetLibrary } from './assets';
 
 // ?fast — 개발·시연용 단축 라운드
@@ -61,7 +62,20 @@ export class Game {
       if (this.rebinding) return;
       if (e.code === 'KeyR') this.restartRequested = true;
       if (e.code === 'KeyK' && this.state === 'menu') this.startRebind();
+      if (e.code === 'KeyB' && this.state === 'menu') this.addBot();
     });
+  }
+
+  private botCount = 0;
+
+  private addBot() {
+    if (this.players.length >= 4) return;
+    const source = new BotSource(this.botCount++);
+    this.joinedSources.add(source.id);
+    this.addPlayer(source);
+    const bot = this.players[this.players.length - 1];
+    source.bind(bot, this.players, this.props);
+    sfx.grab();
   }
 
   private refreshControlsHint() {
@@ -71,7 +85,8 @@ export class Game {
       `${kbd(keyName(s.action))} 잡기/던지기 · ${kbd(keyName(s.jump))} 점프`;
     this.ui.setControlsHint(
       `<b>P1</b> ${keys(p1)}<br/><b>P2</b> ${keys(p2)}<br/>` +
-      `게임패드: 스틱 이동 · A 잡기 · B 점프 (연결하면 자동 인식) &nbsp;|&nbsp; ${kbd('K')} 키 변경`,
+      `게임패드: 스틱 이동 · A 잡기 · B 점프 (연결하면 자동 인식)<br/>` +
+      `${kbd('B')} AI 봇 추가 &nbsp;|&nbsp; ${kbd('K')} 키 변경`,
     );
   }
 

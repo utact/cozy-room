@@ -315,4 +315,63 @@ export const PROP_CATALOG: PropMeta[] = [
       { shape: 'box', size: [0.42, 0.04, 0.32], pos: [0, 0.02, 0], color: 0xd93a3a },
     ],
   },
+
+  // ── 닮은꼴 미끼 — 실루엣은 위 프롭들과 비슷하지만 정체가 다르다 (미스터리 룸의 낚시 요소) ──
+  {
+    // ↔ 프라이팬
+    id: 'pingpong', name: '탁구채', tags: ['스포츠', '장난감', '납작함', '가벼움'],
+    shape: 'cylinder', size: [0.24, 0.05, 0.24], color: 0xc4453a, density: 0.3,
+    parts: [
+      { shape: 'cylinder', size: [0.21, 0.025, 0.21], pos: [0.06, 0, 0] },
+      { shape: 'box', size: [0.26, 0.04, 0.07], pos: [-0.24, 0, 0], color: WOOD },
+    ],
+  },
+  {
+    // ↔ 야구방망이
+    id: 'baguette', name: '바게트', tags: ['음식', '길쭉함', '무기', '유머', '아침'],
+    shape: 'cylinder', size: [0.08, 0.48, 0.08], color: 0xc89b5a, density: 0.4,
+    parts: [
+      { shape: 'cylinder', size: [0.075, 0.34, 0.075], pos: [0, 0, 0] },
+      { shape: 'ball', size: [0.072, 0.072, 0.072], pos: [0, 0.36, 0], color: 0xb98a48 },
+      { shape: 'ball', size: [0.072, 0.072, 0.072], pos: [0, -0.36, 0], color: 0xb98a48 },
+    ],
+  },
+  {
+    // ↔ 수박·축구공
+    id: 'bowling', name: '볼링공', tags: ['스포츠', '무거움', '둥긂', '무기'],
+    shape: 'ball', size: [0.3, 0.3, 0.3], color: 0x2c3a6e, density: 2.4,
+    parts: [
+      { shape: 'ball', size: [0.3, 0.3, 0.3], pos: [0, 0, 0] },
+      { shape: 'ball', size: [0.035, 0.035, 0.035], pos: [-0.07, 0.28, 0.05], color: DARK },
+      { shape: 'ball', size: [0.035, 0.035, 0.035], pos: [0.07, 0.28, 0.05], color: DARK },
+      { shape: 'ball', size: [0.035, 0.035, 0.035], pos: [0, 0.28, -0.08], color: DARK },
+    ],
+  },
+  {
+    // ↔ 트로피·스탠드 조명
+    id: 'plunger', name: '뚫어뻥', tags: ['다용도', '욕실', '유머', '든든함'],
+    shape: 'cone', size: [0.2, 0.35, 0.2], color: 0x8c3a2e, density: 0.6,
+    parts: [
+      { shape: 'cone', size: [0.18, 0.12, 0.18], pos: [0, -0.22, 0] },
+      { shape: 'cylinder', size: [0.025, 0.26, 0.025], pos: [0, 0.1, 0], color: WOOD },
+    ],
+  },
+  {
+    // ↔ 두꺼운 책·토스터
+    id: 'brick', name: '벽돌', tags: ['무기', '무거움', '든든함', '던지기좋음'],
+    shape: 'box', size: [0.4, 0.19, 0.19], color: 0xb0533b, density: 2.2,
+    parts: [
+      { shape: 'box', size: [0.4, 0.19, 0.19], pos: [0, 0, 0] },
+      { shape: 'box', size: [0.42, 0.03, 0.2], pos: [0, 0.04, 0], color: 0x9e492f },
+    ],
+  },
+  {
+    // ↔ TV 리모컨·초코렛… 정체는 간식
+    id: 'chocobar', name: '초코바', tags: ['음식', '가벼움', '선물', '유머'],
+    shape: 'box', size: [0.16, 0.05, 0.36], color: 0x5b3a24, density: 0.25,
+    parts: [
+      { shape: 'box', size: [0.15, 0.045, 0.35], pos: [0, 0, 0] },
+      { shape: 'box', size: [0.16, 0.05, 0.12], pos: [0, 0.004, 0.02], color: CREAM },
+    ],
+  },
 ];
