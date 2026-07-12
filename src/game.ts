@@ -171,13 +171,22 @@ export class Game {
 
   private refreshControlsHint() {
     const [p1, p2] = this.input.schemes;
-    const keys = (s: typeof p1) =>
-      `${kbd(keyName(s.up))}${kbd(keyName(s.left))}${kbd(keyName(s.down))}${kbd(keyName(s.right))} 이동 · ` +
-      `${kbd(keyName(s.action))} 잡기/던지기 · ${kbd(keyName(s.jump))} 점프`;
+    const move = (s: typeof p1) =>
+      `${kbd(keyName(s.up))}${kbd(keyName(s.left))}${kbd(keyName(s.down))}${kbd(keyName(s.right))}`;
+    const row = (who: string, color: string, moveKeys: string, action: string, jump: string) =>
+      `<span class="ctl-who" style="color:${color}">${who}</span>` +
+      `<span>${moveKeys}</span><span>${action}</span><span>${jump}</span>`;
     this.ui.setControlsHint(
-      `<b>P1</b> ${keys(p1)}<br/><b>P2</b> ${keys(p2)}<br/>` +
-      `게임패드: 스틱 이동 · A 잡기 · B 점프 (연결하면 자동 인식)<br/>` +
-      `${kbd('B')} AI 봇 추가 · ${kbd('O')} 온라인 방 만들기 · ${kbd('V')} 음성 채팅 · ${kbd('K')} 키 변경`,
+      `<div class="ctl-table">` +
+      `<span></span><span class="ctl-h">이동</span><span class="ctl-h">잡기 · 던지기</span><span class="ctl-h">점프</span>` +
+      row('P1', '#e4573d', move(p1), kbd(keyName(p1.action)), kbd(keyName(p1.jump))) +
+      row('P2', '#3d7de4', move(p2), kbd(keyName(p2.action)), kbd(keyName(p2.jump))) +
+      row('패드', '#e4b53d', '스틱', kbd('A'), kbd('B')) +
+      `</div>` +
+      `<div class="ctl-meta">` +
+      `<span>${kbd('B')} 봇 추가</span><span>${kbd('O')} 온라인 방</span>` +
+      `<span>${kbd('V')} 음성 채팅</span><span>${kbd('K')} 키 변경</span>` +
+      `</div>`,
     );
   }
 

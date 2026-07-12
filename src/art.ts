@@ -24,6 +24,11 @@ export const ART = {
     local: 'assets/ui/keyart.png',
     remote: `${CDN}/hf_20260712_111330_8993f377-480f-4f36-8cfa-f35ee658fb12.png`,
   },
+  /** 결과 화면 배경 키 비주얼 (16:9, 메뉴와 다른 컷) */
+  keyart2: {
+    local: 'assets/ui/keyart2.png',
+    remote: `${CDN}/hf_20260712_111330_30fb4211-466c-4fbe-a56d-839327daec8b.png`,
+  },
   /** AI 심사위원 로봇 초상 (1:1, 어두운 배경) */
   judge: {
     local: 'assets/ui/judge.png',

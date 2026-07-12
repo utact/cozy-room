@@ -21,7 +21,7 @@ const CSS = `
 .menu-backdrop.on { opacity: 1; }
 .menu-backdrop::after { content: ''; position: absolute; inset: 0;
   background: linear-gradient(rgba(14,10,26,.78) 0%, rgba(14,10,26,.5) 38%, rgba(14,10,26,.9) 100%); }
-.screen.dim > :not(.menu-backdrop) { position: relative; z-index: 1; }
+.screen.dim > :not(.menu-backdrop):not(.confetti) { position: relative; z-index: 1; }
 .logo { position: relative; transform: rotate(-2.5deg); text-align: center;
   animation: logo-bob 3.2s ease-in-out infinite; }
 .logo-img { width: min(600px, 74vw); display: block; margin: 0 auto;
@@ -40,12 +40,20 @@ const CSS = `
   text-shadow: 0 2px 8px rgba(0,0,0,.6); }
 
 .joinrow { display: flex; gap: 14px; margin-top: 6px; }
-.joincard { width: 158px; padding: 16px 10px 13px; border-radius: 18px; text-align: center;
-  display: flex; flex-direction: column; align-items: center; gap: 9px;
-  background: rgba(255,255,255,.06); border: 2px dashed rgba(255,255,255,.22);
-  transition: transform .25s, box-shadow .25s; }
-.joincard.joined { border-style: solid; background: rgba(255,255,255,.12);
-  transform: translateY(-5px); box-shadow: 0 10px 26px rgba(0,0,0,.4); }
+.joincard { width: 158px; padding: 16px 10px 13px; border-radius: 20px; text-align: center;
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  background: linear-gradient(165deg, rgba(255,255,255,.07), rgba(255,255,255,.02));
+  border: 2px dashed rgba(255,255,255,.18); backdrop-filter: blur(10px);
+  transition: transform .3s cubic-bezier(.2,1.4,.4,1), box-shadow .3s, border-color .3s; }
+.joincard .ready { font-size: 10px; letter-spacing: 3px; font-weight: 900;
+  color: #4fbf5e; text-shadow: 0 0 12px rgba(79,191,94,.6); min-height: 13px; }
+.joincard.joined { border-style: solid;
+  background: linear-gradient(165deg, rgba(255,255,255,.13), rgba(255,255,255,.05));
+  transform: translateY(-6px); box-shadow: 0 14px 32px rgba(0,0,0,.45); }
+.joincard.joined .avatar { animation: avatar-float 2.6s ease-in-out infinite; }
+@keyframes avatar-float { 50% { transform: translateY(-5px); } }
+.joincard:not(.joined) { animation: slot-pulse 2.4s ease-in-out infinite; }
+@keyframes slot-pulse { 50% { border-color: rgba(255,255,255,.34); } }
 .avatar { width: 50px; height: 62px; border-radius: 25px; position: relative; flex: none;
   background: #57506e; box-shadow: inset -6px -8px 0 rgba(0,0,0,.16); }
 .avatar .eye { position: absolute; top: 16px; width: 11px; height: 13px;
@@ -59,10 +67,17 @@ const CSS = `
   font-size: 26px; font-weight: 900; opacity: .4; }
 .joincard .who { font-size: 19px; font-weight: 900; }
 .joincard .src { font-size: 11.5px; opacity: .78; line-height: 1.55; min-height: 34px; }
-.hint { font-size: 13.5px; line-height: 2.15; text-align: center; color: rgba(255,255,255,.82);
-  background: rgba(15,11,28,.55); padding: 12px 26px; border-radius: 16px;
-  border: 1px solid rgba(255,255,255,.07); }
-.hint b { color: #ffd98c; margin-right: 2px; }
+.hint { font-size: 13px; color: rgba(255,255,255,.85);
+  background: linear-gradient(180deg, rgba(20,15,38,.72), rgba(14,10,26,.72));
+  padding: 14px 26px 12px; border-radius: 18px;
+  border: 1px solid rgba(255,255,255,.09); backdrop-filter: blur(10px); }
+.ctl-table { display: grid; grid-template-columns: 46px auto auto auto; gap: 7px 26px;
+  align-items: center; justify-items: start; }
+.ctl-h { font-size: 10.5px; letter-spacing: 2px; opacity: .5; font-weight: 800; }
+.ctl-who { font-weight: 900; font-size: 13px; }
+.ctl-meta { margin-top: 10px; padding-top: 9px; border-top: 1px solid rgba(255,255,255,.09);
+  display: flex; gap: 20px; justify-content: center; font-size: 12.5px; opacity: .85; }
+.ctl-meta span { display: flex; align-items: center; gap: 6px; }
 .start-hint { margin-top: 8px; font-size: 19px; font-weight: 800; color: #ffd98c;
   animation: pulse 1.4s infinite; text-shadow: 0 2px 10px rgba(0,0,0,.5); }
 @keyframes pulse { 50% { opacity: .45; } }
@@ -120,8 +135,9 @@ const CSS = `
 /* ── 심사 ── */
 .judge-panel { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%);
   width: min(680px, 92vw); padding: 26px 30px; border-radius: 22px;
-  background: rgba(24,19,44,.94); box-shadow: 0 16px 60px rgba(0,0,0,.55);
-  border: 1px solid rgba(255,255,255,.08);
+  background: linear-gradient(180deg, rgba(31,24,54,.97), rgba(19,14,36,.97));
+  box-shadow: 0 20px 70px rgba(0,0,0,.6);
+  border: 1px solid rgba(255,255,255,.09); border-top: 3px solid #ffcf6b;
   display: flex; flex-direction: column; gap: 14px; }
 .judge-panel h2 { margin: 0 0 4px; font-size: 22px; color: #ffb86b;
   display: flex; align-items: center; gap: 10px; }
@@ -143,6 +159,9 @@ const CSS = `
 .verdict .head { font-weight: 800; font-size: 15px; }
 .verdict .comment { font-size: 14px; opacity: .9; margin-top: 2px; line-height: 1.5; }
 .verdict .score { font-size: 26px; font-weight: 900; font-variant-numeric: tabular-nums; }
+.verdict.hi { background: linear-gradient(90deg, rgba(255,207,107,.14), rgba(255,255,255,.05)); }
+.verdict.hi .score { color: #ffcf6b; text-shadow: 0 0 16px rgba(255,207,107,.4); }
+.verdict.lo .score { color: #a89ec4; opacity: .8; }
 
 /* ── 결과 ── */
 .results-title { font-size: clamp(34px, 5vw, 54px); font-weight: 900; letter-spacing: -1px;
@@ -167,6 +186,8 @@ const CSS = `
 .pod .stand.r3 { border-top: 4px solid #d2905c; color: #d2905c; }
 .also-ran { display: flex; gap: 10px; align-items: center; font-size: 16px; font-weight: 700;
   opacity: .8; margin-top: 4px; }
+.results-inner { display: flex; flex-direction: column; align-items: center; gap: 18px;
+  position: relative; z-index: 1; }
 .bubble { position: relative; margin-top: 20px; background: #fdf6ec; color: #2c2440;
   padding: 15px 26px; border-radius: 18px; font-weight: 700; font-size: 17px;
   max-width: 620px; text-align: center; line-height: 1.6;
@@ -187,7 +208,7 @@ const CSS = `
   max-width: 70vw; line-height: 1.45; }
 
 .confetti { position: absolute; top: -8vh; width: 10px; height: 16px; border-radius: 2px;
-  pointer-events: none; animation: confetti-fall linear forwards; }
+  pointer-events: none; z-index: 2; animation: confetti-fall linear forwards; }
 @keyframes confetti-fall {
   to { transform: translateY(122vh) rotate(760deg); opacity: .75; }
 }
@@ -377,8 +398,18 @@ export class UI {
     this.judgeEl = this.el('div', 'judge-panel hidden', this.root);
   }
 
+  private resultsInner!: HTMLDivElement;
+
   private buildResults() {
     this.resultsEl = this.el('div', 'screen dim hidden', this.root);
+    const backdrop = this.el('div', 'menu-backdrop', this.resultsEl);
+    loadArt(ART.keyart2, (url) => {
+      if (url) {
+        backdrop.style.backgroundImage = `url('${url}')`;
+        backdrop.classList.add('on');
+      }
+    });
+    this.resultsInner = this.el('div', 'results-inner', this.resultsEl);
   }
 
   // ── 메뉴 ──
@@ -399,9 +430,13 @@ export class UI {
       card.className = 'joincard' + (j ? ' joined' : '');
       if (j) {
         card.style.borderColor = colorHex(j.color);
-        card.innerHTML = `${avatarHtml(j.color)}<div class="who" style="color:${colorHex(j.color)}">${j.name}</div><div class="src">${j.label}</div>`;
+        card.innerHTML =
+          `<div class="ready">READY!</div>${avatarHtml(j.color)}` +
+          `<div class="who" style="color:${colorHex(j.color)}">${j.name}</div><div class="src">${j.label}</div>`;
       } else {
-        card.innerHTML = `${avatarHtml(null)}<div class="who" style="opacity:.4">?</div><div class="src">잡기 버튼을 눌러<br/>참가</div>`;
+        card.innerHTML =
+          `<div class="ready"></div>${avatarHtml(null)}` +
+          `<div class="who" style="opacity:.4">?</div><div class="src">잡기 버튼을 눌러<br/>참가</div>`;
       }
       this.joinRow.appendChild(card);
     }
@@ -492,7 +527,7 @@ export class UI {
 
   addVerdict(name: string, color: number, itemName: string | null, score: number, comment: string) {
     const v = document.createElement('div');
-    v.className = 'verdict';
+    v.className = 'verdict' + (score >= 70 ? ' hi' : score < 40 ? ' lo' : '');
     v.innerHTML =
       `<div class="badge" style="background:${colorHex(color)}">${name}</div>` +
       `<div class="body"><div class="head">${itemName ?? '(빈손)'}</div><div class="comment">${comment}</div></div>` +
@@ -508,11 +543,11 @@ export class UI {
   // ── 결과 ──
   showResults(rows: { name: string; color: number; score: number }[], comment: string) {
     this.resultsEl.classList.remove('hidden');
-    this.resultsEl.innerHTML = '';
-    this.el('div', 'results-title', this.resultsEl, '결과 발표!');
+    this.resultsInner.innerHTML = '';
+    this.el('div', 'results-title', this.resultsInner, '결과 발표!');
 
     // 시상대 — 상위 3명 (2등 · 1등 · 3등 배치)
-    const podium = this.el('div', 'podium', this.resultsEl);
+    const podium = this.el('div', 'podium', this.resultsInner);
     const standH = [128, 88, 62];
     const order = [1, 0, 2].filter((r) => r < rows.length);
     for (const rank of order) {
@@ -531,12 +566,14 @@ export class UI {
     // 4위
     for (let i = 3; i < rows.length; i++) {
       const r = rows[i];
-      this.el('div', 'also-ran', this.resultsEl,
+      this.el('div', 'also-ran', this.resultsInner,
         `<span style="opacity:.6">${i + 1}위</span><span style="color:${colorHex(r.color)}">${r.name}</span><span>${r.score}점</span>`);
     }
 
-    this.el('div', 'bubble', this.resultsEl, `${comment}<span class="by">— AI 심사위원</span>`);
-    this.el('div', 'start-hint', this.resultsEl, `${kbd('R')} 눌러 다시하기`);
+    const avatar = this.judgeArtUrl
+      ? `<img class="tada-avatar" src="${this.judgeArtUrl}" alt="" style="margin-bottom:4px" />` : '';
+    this.el('div', 'bubble', this.resultsInner, `${avatar}${comment}<span class="by">— AI 심사위원</span>`);
+    this.el('div', 'start-hint', this.resultsInner, `${kbd('R')} 눌러 다시하기`);
     this.dropConfetti();
   }
 
