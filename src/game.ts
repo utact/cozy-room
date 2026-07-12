@@ -54,6 +54,7 @@ export class Game {
   private accumulator = 0;
   private lastTime = performance.now();
   private restartRequested = false;
+  private reloading = false;
   private rebinding = false;
 
   constructor(container: HTMLElement, assets: AssetLibrary) {
@@ -221,13 +222,15 @@ export class Game {
       case 'judging': this.tickPhysicsOnly(dt); break;
       case 'results':
         this.tickPhysicsOnly(dt);
-        if (this.restartRequested) {
+        if (this.restartRequested && !this.reloading) {
+          this.restartRequested = false;
           // 온라인 방은 세션을 유지해야 하므로 리로드 대신 같은 방에서 재경기
           if (this.hostSession) {
-            this.restartRequested = false;
             this.ui.hideResults();
             this.beginMatch();
           } else {
+            // reload는 딱 한 번만 — 매 틱 반복 호출되면 무한 로딩처럼 보인다
+            this.reloading = true;
             location.reload();
           }
         }

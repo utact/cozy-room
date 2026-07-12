@@ -33,6 +33,8 @@ export class Player {
   private missingArms = new Set<'L' | 'R'>();
   /** 직전 프레임 이동 입력 크기 — 줄다리기 힘 계산용 */
   lastMoveMag = 0;
+  private jumpBuffer = 0;
+  private coyote = 0;
   /** 현재 잡기 후보 프롭 위치 (네트워크 동기화용) */
   indicatorPos: { x: number; z: number } | null = null;
   /** 잡기 가능한 프롭 아래 표시되는 링 */
@@ -132,10 +134,15 @@ export class Player {
       true,
     );
 
-    // 점프 — 바닥(또는 가구·프롭 위)에 서 있을 때만
-    if (input.jumpPressed && this.isGrounded()) {
+    // 점프 — 입력 버퍼(착지 직전 입력 허용) + 코요테 타임(모서리 이탈 직후 허용)
+    if (input.jumpPressed) this.jumpBuffer = 0.15;
+    else this.jumpBuffer = Math.max(0, this.jumpBuffer - dt);
+    this.coyote = this.isGrounded() ? 0.1 : Math.max(0, this.coyote - dt);
+    if (this.jumpBuffer > 0 && this.coyote > 0) {
+      this.jumpBuffer = 0;
+      this.coyote = 0;
       const v = this.body.linvel();
-      this.body.setLinvel({ x: v.x, y: 5.0, z: v.z }, true);
+      this.body.setLinvel({ x: v.x, y: 5.4, z: v.z }, true);
       sfx.jump();
     }
 
