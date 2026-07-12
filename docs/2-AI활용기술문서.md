@@ -8,6 +8,7 @@
 |---|---|---|
 | 게임 개발 전반 | Claude Code (Anthropic) | 기획 스펙 설계, 전체 코드 작성, 헤드리스 브라우저 자동 검증 |
 | 런타임 AI 심사위원 | 자체 심사 엔진 + LLM 연동 훅 | 주제-아이템 적합도 채점 및 한 줄 평 생성 |
+| 2D 아트 | Higgsfield (Google nano-banana-pro) | 타이틀 로고 워드마크, 메뉴 키 비주얼, AI 심사위원 캐릭터 초상 (`src/art.ts` 매니페스트) |
 | 3D 에셋 | `[ 사용한 생성형 3D 도구 ]` | 프롭 3D 모델 생성 (드롭인 파이프라인) |
 
 ## 2. 개발 프로세스에서의 AI 활용 (Claude Code)
@@ -68,7 +69,8 @@ JSON으로만 답하라: {"verdicts":[{"playerId":0,"score":85,"comment":"..."}]
 | Rapier (@dimforge/rapier3d-compat) | 물리 엔진 | Apache-2.0 |
 | Vite | 빌드 도구 | MIT |
 | TypeScript | 언어 | Apache-2.0 |
-| 효과음 | WebAudio 실시간 합성 (자체 제작) | — |
+| 효과음·BGM | WebAudio 실시간 합성 (자체 제작) | — |
+| 로고·키 비주얼·심사위원 초상 | Higgsfield로 생성 (Google nano-banana-pro 모델) | `[ Higgsfield 플랜 상업 이용 약관 확인 후 기재 ]` |
 | 3D 프롭 비주얼 | 절차적 생성 (자체 제작) + `[ 생성형 3D 출처 ]` | `[ ]` |
 
 외부 이미지·사운드 파일은 사용하지 않았다 (전부 코드로 생성).

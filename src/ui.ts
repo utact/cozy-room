@@ -1,5 +1,7 @@
 /** DOM 오버레이 UI — 메뉴/주제 배너/타이머/HUD/심사 패널/결과 */
 
+import { ART, loadArt } from './art';
+
 const CSS = `
 .ui-root { position: absolute; inset: 0; pointer-events: none; color: #fff;
   font-family: 'Pretendard', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif; }
@@ -14,8 +16,16 @@ const CSS = `
   font-weight: 800; font-size: 13px; text-align: center; }
 
 /* ── 메뉴 ── */
+.menu-backdrop { position: absolute; inset: 0; z-index: 0; opacity: 0;
+  background-size: cover; background-position: center; transition: opacity .9s; }
+.menu-backdrop.on { opacity: 1; }
+.menu-backdrop::after { content: ''; position: absolute; inset: 0;
+  background: linear-gradient(rgba(14,10,26,.78) 0%, rgba(14,10,26,.5) 38%, rgba(14,10,26,.9) 100%); }
+.screen.dim > :not(.menu-backdrop) { position: relative; z-index: 1; }
 .logo { position: relative; transform: rotate(-2.5deg); text-align: center;
   animation: logo-bob 3.2s ease-in-out infinite; }
+.logo-img { width: min(600px, 74vw); display: block; margin: 0 auto;
+  filter: drop-shadow(0 16px 34px rgba(0,0,0,.6)); }
 @keyframes logo-bob { 50% { transform: rotate(-2.5deg) translateY(-7px); } }
 .logo .big { font-size: clamp(46px, 8vw, 92px); font-weight: 900; letter-spacing: -3px;
   line-height: 1.05;
@@ -115,6 +125,10 @@ const CSS = `
   display: flex; flex-direction: column; gap: 14px; }
 .judge-panel h2 { margin: 0 0 4px; font-size: 22px; color: #ffb86b;
   display: flex; align-items: center; gap: 10px; }
+.judge-avatar { width: 46px; height: 46px; border-radius: 50%; object-fit: cover;
+  border: 2px solid rgba(255,255,255,.22); box-shadow: 0 4px 14px rgba(0,0,0,.4); }
+.tada-avatar { width: 62px; height: 62px; border-radius: 50%; object-fit: cover;
+  border: 2px solid #ffd66b; margin: 0 auto 8px; display: block; }
 .ai-chip { display: inline-block; padding: 3px 12px; border-radius: 9px; font-size: 15px;
   background: linear-gradient(135deg, #7b5cd6, #4a3aa8); color: #fff;
   border: 1px solid rgba(255,255,255,.3); letter-spacing: 1px; }
@@ -264,10 +278,27 @@ export class UI {
     return e;
   }
 
+  /** 생성형 아트 로드 성공 시 채워지는 URL (심사 패널 등에서 사용) */
+  private judgeArtUrl: string | null = null;
+
   private buildMenu() {
     this.menuEl = this.el('div', 'screen dim', this.root);
-    this.el('div', 'logo', this.menuEl,
+    const backdrop = this.el('div', 'menu-backdrop', this.menuEl);
+    const logo = this.el('div', 'logo', this.menuEl,
       `<div class="big">잡아라! <em>코지 룸</em></div><div class="ribbon">1~4인 물리 난투!</div>`);
+    // 생성형 아트 — 로드되면 텍스트 로고를 이미지로, 배경에 키 비주얼
+    loadArt(ART.logo, (url) => {
+      if (url) logo.querySelector('.big')!.outerHTML = `<img class="logo-img" src="${url}" alt="잡아라! 코지 룸" />`;
+    });
+    loadArt(ART.keyart, (url) => {
+      if (url) {
+        backdrop.style.backgroundImage = `url('${url}')`;
+        backdrop.classList.add('on');
+      }
+    });
+    loadArt(ART.judge, (url) => {
+      this.judgeArtUrl = url;
+    });
     this.el('div', 'subtitle', this.menuEl, '주제에 맞는 물건을 잡아라 — 뺏고, 던지고, AI 심사를 받아라!');
     this.joinRow = this.el('div', 'joinrow', this.menuEl);
     this.controlsHint = this.el('div', 'hint', this.menuEl);
@@ -332,7 +363,8 @@ export class UI {
 
   // ── 클로즈업 "따란" 카드 ──
   showTada(label: string, main: string) {
-    this.tadaEl.innerHTML = `<div class="t-label">${label}</div><div class="t-main">${main}</div>`;
+    const avatar = this.judgeArtUrl ? `<img class="tada-avatar" src="${this.judgeArtUrl}" alt="" />` : '';
+    this.tadaEl.innerHTML = `${avatar}<div class="t-label">${label}</div><div class="t-main">${main}</div>`;
     this.tadaEl.classList.remove('shown');
     requestAnimationFrame(() => requestAnimationFrame(() => this.tadaEl.classList.add('shown')));
   }
@@ -450,7 +482,8 @@ export class UI {
   // ── 심사 ──
   showJudgePanel(topicText: string) {
     this.judgeEl.classList.remove('hidden');
-    this.judgeEl.innerHTML = `<h2><span class="ai-chip">AI</span>심사위원의 판정</h2><div class="topic-small">주제: ${topicText}</div>`;
+    const avatar = this.judgeArtUrl ? `<img class="judge-avatar" src="${this.judgeArtUrl}" alt="" />` : `<span class="ai-chip">AI</span>`;
+    this.judgeEl.innerHTML = `<h2>${avatar}AI 심사위원의 판정</h2><div class="topic-small">주제: ${topicText}</div>`;
     this.judgeList = this.el('div', '', this.judgeEl);
     this.judgeList.style.display = 'flex';
     this.judgeList.style.flexDirection = 'column';
