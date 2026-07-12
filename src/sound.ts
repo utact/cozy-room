@@ -88,6 +88,26 @@ class Sfx {
     this.noise(0.28, 0.4, 1600);
     this.tone('sawtooth', 300, 90, 0.35, 0.28, 0.04);
   }
+  /** 클로즈업 긴장감 — 점점 빨라지는 드럼롤 (~1.7초) */
+  drumroll() {
+    let when = 0;
+    let gap = 0.13;
+    for (let i = 0; i < 22; i++) {
+      this.noise(0.045, 0.16, 2600, when);
+      this.tone('triangle', 130, 110, 0.05, 0.1, when);
+      when += gap;
+      gap = Math.max(0.045, gap * 0.93);
+    }
+  }
+  /** 따란~! */
+  tada() {
+    this.tone('sawtooth', 392, 392, 0.22, 0.16);
+    for (const f of [523.25, 659.25, 783.99]) {
+      this.tone('sawtooth', f, f, 0.7, 0.13, 0.18);
+      this.tone('triangle', f * 2, f * 2, 0.5, 0.06, 0.18);
+    }
+    this.noise(0.5, 0.1, 4000, 0.18);
+  }
 
   // ── BGM: 제너러티브 로파이 루프 (코지룸 무드) ──────────
   // Cmaj7 → Am7 → Fmaj7 → G7, 88bpm 8분음표 그리드를 룩어헤드 스케줄링.

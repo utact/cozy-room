@@ -91,6 +91,80 @@ function pick<T>(arr: T[], rng: () => number): T {
   return arr[Math.floor(rng() * arr.length)];
 }
 
+/** 받침 유무에 따른 조사 선택 — "곰인형을" / "프라이팬을" / "고무오리를" */
+export function josa(word: string, pair: '을를' | '이가' | '은는' | '와과'): string {
+  const code = word.charCodeAt(word.length - 1);
+  const hasJong = code >= 0xac00 && code <= 0xd7a3 ? (code - 0xac00) % 28 !== 0 : false;
+  const table: Record<string, [string, string]> = {
+    을를: ['을', '를'], 이가: ['이', '가'], 은는: ['은', '는'], 와과: ['과', '와'],
+  };
+  const [withJong, withoutJong] = table[pair];
+  return word + (hasJong ? withJong : withoutJong);
+}
+
+// ── 일치 라운드 — 주인공(틀린 사람) 폭로 멘트 ──────────────
+
+// 조사 토큰: {target을} {target이} {actual을} {actual이} {actual였} 은 받침에 맞게 치환된다
+const PUNCH_LOOKALIKE = [
+  '이런… {target}같이 생긴 {actual였}습니다!',
+  '{name} 선수, 그것은 {target이} 아니라 {actual}입니다!',
+  '아깝다! 실루엣은 완벽했지만… {actual}입니다.',
+];
+const PUNCH_WRONG = [
+  '{name} 선수, 아무리 봐도 그건 {actual}인데요.',
+  '{target을} 들라고 했는데 {actual을} 들고 당당하게 서 있습니다.',
+  '{actual}… 그건 누가 봐도 {actual}입니다, {name} 선수.',
+];
+const PUNCH_EMPTY = [
+  '{name} 선수, 손이 텅 비었습니다. 박수 부탁드립니다.',
+  '모두가 하나씩 들 때, {name} 선수는 아무것도 잡지 못했습니다.',
+  '오늘의 주인공은 빈손의 {name} 선수입니다. 따란~',
+];
+
+/** 받침 유무에 따라 '였습니다/이었습니다' 앞부분 생성 */
+function yeot(word: string): string {
+  const code = word.charCodeAt(word.length - 1);
+  const hasJong = code >= 0xac00 && code <= 0xd7a3 ? (code - 0xac00) % 28 !== 0 : false;
+  return word + (hasJong ? '이었' : '였');
+}
+
+export function matchPunchline(
+  name: string,
+  targetName: string,
+  actualName: string | null,
+  isLookalike: boolean,
+  rng: () => number = Math.random,
+): string {
+  const pool = actualName === null ? PUNCH_EMPTY : isLookalike ? PUNCH_LOOKALIKE : PUNCH_WRONG;
+  const actual = actualName ?? '';
+  return pick(pool, rng)
+    .replaceAll('{name}', name)
+    .replaceAll('{target을}', josa(targetName, '을를'))
+    .replaceAll('{target이}', josa(targetName, '이가'))
+    .replaceAll('{actual을}', josa(actual, '을를'))
+    .replaceAll('{actual이}', josa(actual, '이가'))
+    .replaceAll('{actual였}', yeot(actual))
+    .replaceAll('{target}', targetName)
+    .replaceAll('{actual}', actual);
+}
+
+const MATCH_CORRECT_COMMENTS = [
+  '완벽한 일치. 통과!',
+  '정확하다. 눈썰미 인정.',
+  '군말 없이 정답.',
+  '이 정도면 프로 감정사.',
+];
+const MATCH_WRONG_COMMENTS = [
+  '오늘의 주인공… 다시 보게 됐다.',
+  '자신감 하나는 만점이었다.',
+  '실루엣 감정 능력 재교육 필요.',
+  '빈손도 패션이라면 할 말 없다.',
+];
+
+export function matchComment(correct: boolean, rng: () => number = Math.random): string {
+  return pick(correct ? MATCH_CORRECT_COMMENTS : MATCH_WRONG_COMMENTS, rng);
+}
+
 /** 같은 심사에서 같은 문장이 두 번 나오지 않도록 사용 이력을 피해 뽑기 */
 function pickFresh(arr: string[], rng: () => number, used: Set<string>): string {
   const fresh = arr.filter((t) => !used.has(t));

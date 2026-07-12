@@ -162,6 +162,16 @@ const CSS = `
   border-bottom-color: #fdf6ec; border-top: 0; }
 .bubble .by { display: block; margin-top: 6px; font-size: 12.5px; opacity: .55; font-weight: 800; }
 
+.tada-card { position: absolute; left: 50%; top: 18%; transform: translateX(-50%) scale(.55);
+  opacity: 0; padding: 22px 44px; border-radius: 22px; text-align: center;
+  background: rgba(15,11,28,.95); border: 3px solid #ffd66b;
+  box-shadow: 0 18px 60px rgba(0,0,0,.6), 0 0 46px rgba(255,214,107,.25);
+  transition: transform .38s cubic-bezier(.2,1.7,.4,1), opacity .3s; pointer-events: none; }
+.tada-card.shown { transform: translateX(-50%) scale(1); opacity: 1; }
+.tada-card .t-label { font-size: 15px; font-weight: 800; letter-spacing: 4px; color: #ffd66b; }
+.tada-card .t-main { font-size: clamp(20px, 3vw, 30px); font-weight: 900; margin-top: 8px;
+  max-width: 70vw; line-height: 1.45; }
+
 .confetti { position: absolute; top: -8vh; width: 10px; height: 16px; border-radius: 2px;
   pointer-events: none; animation: confetti-fall linear forwards; }
 @keyframes confetti-fall {
@@ -208,6 +218,7 @@ export class UI {
   private judgeList!: HTMLDivElement;
   private resultsEl!: HTMLDivElement;
   private eventEl!: HTMLDivElement;
+  private tadaEl!: HTMLDivElement;
 
   constructor(container: HTMLElement) {
     const style = document.createElement('style');
@@ -246,6 +257,18 @@ export class UI {
     this.timerEl = this.el('div', 'timer hidden', this.root);
     this.hudEl = this.el('div', 'hud hidden', this.root);
     this.eventEl = this.el('div', 'event-banner hidden', this.root);
+    this.tadaEl = this.el('div', 'tada-card', this.root);
+  }
+
+  // ── 클로즈업 "따란" 카드 ──
+  showTada(label: string, main: string) {
+    this.tadaEl.innerHTML = `<div class="t-label">${label}</div><div class="t-main">${main}</div>`;
+    this.tadaEl.classList.remove('shown');
+    requestAnimationFrame(() => requestAnimationFrame(() => this.tadaEl.classList.add('shown')));
+  }
+
+  hideTada() {
+    this.tadaEl.classList.remove('shown');
   }
 
   private buildJudge() {

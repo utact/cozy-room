@@ -41,6 +41,25 @@ const DARK = 0x2f2f38;
 const METAL = 0xcfd2d8;
 const CREAM = 0xf0ead6;
 
+/** 닮은꼴 관계 — 일치 라운드의 낚시 판정과 미끼 스폰에 쓰인다 */
+export const LOOKALIKES: Record<string, string[]> = {
+  'frying-pan': ['pingpong'],
+  pingpong: ['frying-pan'],
+  'baseball-bat': ['baguette'],
+  baguette: ['baseball-bat'],
+  watermelon: ['bowling'],
+  'soccer-ball': ['bowling'],
+  bowling: ['watermelon', 'soccer-ball'],
+  trophy: ['plunger'],
+  lamp: ['plunger'],
+  plunger: ['trophy', 'lamp'],
+  book: ['brick'],
+  toaster: ['brick'],
+  brick: ['book', 'toaster'],
+  'tv-remote': ['chocobar'],
+  chocobar: ['tv-remote'],
+};
+
 export const PROP_CATALOG: PropMeta[] = [
   {
     id: 'frying-pan', name: '프라이팬', tags: ['무기', '주방', '금속', '방어', '요리'],

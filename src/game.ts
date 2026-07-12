@@ -6,8 +6,9 @@ import { PropManager, type Prop } from './objects';
 import { Player, PLAYER_COLORS, PLAYER_NAMES } from './player';
 import { InputManager, keyName, type InputSource } from './input';
 import { UI, kbd } from './ui';
-import { createJudge, winnerComment, type JudgeEntry } from './judge';
+import { createJudge, winnerComment, josa, matchPunchline, matchComment, type JudgeEntry } from './judge';
 import { pickTopics, type Topic } from './topics';
+import { PROP_CATALOG, LOOKALIKES, type PropMeta } from './catalog';
 import { pickEvent, type EventCtx, type RoundEvent } from './events';
 import { sfx } from './sound';
 import { BotSource } from './bot';
@@ -44,6 +45,9 @@ export class Game {
   private topics: Topic[] = [];
   private event: RoundEvent | null = null;
   private lastBeepSec = -1;
+  /** 라운드별 타입 — 'match' = 일치 라운드 (모두 같은 물건, 하나 모자람) */
+  private roundTypes: ('normal' | 'match')[] = [];
+  private matchTarget: PropMeta | null = null;
   private accumulator = 0;
   private lastTime = performance.now();
   private restartRequested = false;
@@ -114,6 +118,7 @@ export class Game {
         this.tick(FIXED_DT);
         this.accumulator -= FIXED_DT;
       }
+      this.world.updateCamera(dt);
       this.world.render();
       requestAnimationFrame(loop);
     };
@@ -181,6 +186,13 @@ export class Game {
     this.topics = pickTopics(ROUNDS);
     this.round = 0;
     for (const p of this.players) p.score = 0;
+    // 2인 이상이면 라운드 하나(2~마지막)가 일치 라운드가 된다. ?match 로 전부 강제 가능
+    this.roundTypes = Array(ROUNDS).fill('normal');
+    const forceMatch = new URLSearchParams(location.search).has('match');
+    if (this.players.length >= 2) {
+      if (forceMatch) this.roundTypes.fill('match');
+      else this.roundTypes[1 + Math.floor(Math.random() * (ROUNDS - 1))] = 'match';
+    }
     this.beginRound();
   }
 
@@ -199,13 +211,45 @@ export class Game {
     this.lastBeepSec = -1;
     this.tugs.clear();
     this.props.scatter();
+    this.matchTarget =
+      this.roundTypes[this.round - 1] === 'match' ? this.setupMatchRound() : null;
     this.players.forEach((p, i) => {
       p.frozen = false;
       p.resetForRound(SPAWNS[i]);
     });
-    this.ui.showTopic(this.round, ROUNDS, this.currentTopic.text, this.world.theme.name);
+    const topicText = this.matchTarget
+      ? `모두 【${this.matchTarget.name}】 들어라!`
+      : this.currentTopic.text;
+    const label = this.matchTarget
+      ? `${this.world.theme.name} · 하나 모자란다!`
+      : this.world.theme.name;
+    this.ui.showTopic(this.round, ROUNDS, topicText, label);
     this.ui.setHud(this.hudEntries());
     this.setState('topic');
+  }
+
+  /**
+   * 일치 라운드 준비 — 목표 프롭 복제본을 (인원수-1)개만 두고,
+   * 닮은꼴 미끼를 추가로 흩어놓는다. 의자앉기 + 낚시.
+   */
+  private setupMatchRound(): PropMeta | null {
+    const need = this.players.length - 1;
+    const candidates = Object.keys(LOOKALIKES).filter((id) => {
+      const meta = PROP_CATALOG.find((m) => m.id === id);
+      return meta && this.props.countOf(id) <= need;
+    });
+    if (candidates.length === 0) return null; // 조건 미달 → 일반 라운드로
+    const targetId = candidates[Math.floor(Math.random() * candidates.length)];
+    const target = PROP_CATALOG.find((m) => m.id === targetId)!;
+    // 복제본을 정확히 need개로
+    for (let i = this.props.countOf(targetId); i < need; i++) this.props.spawnTemp(target);
+    // 닮은꼴 미끼는 넉넉하게 (종류당 최소 2개)
+    for (const fakeId of LOOKALIKES[targetId] ?? []) {
+      const fake = PROP_CATALOG.find((m) => m.id === fakeId);
+      if (!fake) continue;
+      for (let i = this.props.countOf(fakeId); i < 2; i++) this.props.spawnTemp(fake);
+    }
+    return target;
   }
 
   private get currentTopic(): Topic {
@@ -361,11 +405,28 @@ export class Game {
       item: p.held?.meta ?? null,
     }));
 
-    this.ui.showJudgePanel(this.currentTopic.text);
-    const result = await this.judge.judge({ topic: this.currentTopic, entries });
+    if (this.matchTarget) {
+      await this.matchShow(entries);
+    } else {
+      this.ui.showJudgePanel(this.currentTopic.text);
+      const result = await this.judge.judge({ topic: this.currentTopic, entries });
+      await this.revealVerdicts(entries, result.verdicts);
+    }
 
-    // 낮은 점수부터 공개해 긴장감 유지
-    const sorted = [...result.verdicts].sort((a, b) => a.score - b.score);
+    await delay(2800);
+    this.ui.hideJudgePanel();
+    for (const p of this.players) p.release();
+
+    if (this.round >= ROUNDS) this.showResults();
+    else this.beginRound();
+  }
+
+  /** 낮은 점수부터 공개해 긴장감 유지 */
+  private async revealVerdicts(
+    entries: JudgeEntry[],
+    verdicts: { playerId: number; score: number; comment: string }[],
+  ) {
+    const sorted = [...verdicts].sort((a, b) => a.score - b.score);
     for (const v of sorted) {
       await delay(1100);
       const p = this.players[v.playerId];
@@ -378,13 +439,48 @@ export class Game {
       );
       this.ui.setHud(this.hudEntries());
     }
+  }
 
-    await delay(2800);
-    this.ui.hideJudgePanel();
-    for (const p of this.players) p.release();
+  /** 일치 라운드 — 틀린 사람 클로즈업 쇼 → 폭로 → 점수 공개 */
+  private async matchShow(entries: JudgeEntry[]) {
+    const target = this.matchTarget!;
+    const isCorrect = (e: JudgeEntry) => e.item?.id === target.id;
+    const losers = entries.filter((e) => !isCorrect(e));
+    // 주인공 우선순위: 닮은꼴을 든 사람 > 오답 > 빈손
+    const rank = (e: JudgeEntry) =>
+      e.item ? ((LOOKALIKES[target.id] ?? []).includes(e.item.id) ? 0 : 1) : 2;
+    const star = [...losers].sort((a, b) => rank(a) - rank(b))[0] ?? null;
 
-    if (this.round >= ROUNDS) this.showResults();
-    else this.beginRound();
+    if (star) {
+      await delay(600);
+      const p = this.players[star.playerId];
+      this.world.focusOn(p.position);
+      sfx.drumroll();
+      this.ui.showTada('과연', '오늘의 주인공은…?');
+      await delay(2000);
+      sfx.tada();
+      const isLook = !!star.item && (LOOKALIKES[target.id] ?? []).includes(star.item.id);
+      this.ui.showTada(
+        `따란~ 오늘의 주인공: ${PLAYER_NAMES[star.playerId]}`,
+        matchPunchline(PLAYER_NAMES[star.playerId], target.name, star.item?.name ?? null, isLook),
+      );
+      await delay(3400);
+      this.ui.hideTada();
+      this.world.resetFocus();
+      await delay(700);
+    }
+
+    this.ui.showJudgePanel(`모두 ${josa(target.name, '을를')} 들어라!`);
+    const verdicts = entries.map((e) => {
+      const correct = isCorrect(e);
+      const score = correct
+        ? 65 + Math.floor(Math.random() * 21)
+        : e.item
+          ? 8 + Math.floor(Math.random() * 12)
+          : 3 + Math.floor(Math.random() * 8);
+      return { playerId: e.playerId, score, comment: matchComment(correct) };
+    });
+    await this.revealVerdicts(entries, verdicts);
   }
 
   private showResults() {

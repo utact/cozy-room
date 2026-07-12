@@ -18,6 +18,16 @@ export class World3D {
   floorCollider!: RAPIER.Collider;
   theme: RoomTheme = pickTheme();
 
+  // ── 카메라 리그 — focusOn/resetFocus로 클로즈업 연출 ──
+  private hemi!: THREE.HemisphereLight;
+  private sun!: THREE.DirectionalLight;
+  private spot!: THREE.SpotLight;
+  private readonly homePos = new THREE.Vector3(0, 13.5, 12.5);
+  private readonly homeLook = new THREE.Vector3(0, 0, -0.5);
+  private posTarget = this.homePos.clone();
+  private lookTarget = this.homeLook.clone();
+  private lookCur = this.homeLook.clone();
+
   constructor(container: HTMLElement) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -53,6 +63,15 @@ export class World3D {
     const warm = new THREE.PointLight(this.theme.glow, 30, 18);
     warm.position.set(-4, 3, -3);
     this.scene.add(warm);
+    this.hemi = this.scene.children.find((c) => c instanceof THREE.HemisphereLight) as THREE.HemisphereLight;
+    this.sun = sun;
+
+    // 클로즈업 연출용 스포트라이트 (평소 꺼짐)
+    this.spot = new THREE.SpotLight(0xfff1cc, 260, 14, Math.PI / 7, 0.45);
+    this.spot.visible = false;
+    this.spot.target = new THREE.Object3D();
+    this.scene.add(this.spot);
+    this.scene.add(this.spot.target);
 
     // 물리 월드
     this.physics = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
@@ -114,6 +133,33 @@ export class World3D {
     for (const f of theme.furniture) {
       this.staticBox(f.x, f.hy, f.z, f.hx, f.hy, f.hz, f.color);
     }
+  }
+
+  /** 특정 지점 클로즈업 — 스포트라이트 켜고 주변광을 낮춰 극적 연출 */
+  focusOn(p: THREE.Vector3) {
+    this.posTarget.set(p.x, p.y + 3.2, p.z + 3.8);
+    this.lookTarget.copy(p);
+    this.spot.position.set(p.x, p.y + 5.5, p.z + 0.6);
+    this.spot.target.position.copy(p);
+    this.spot.visible = true;
+    this.hemi.intensity = 0.18;
+    this.sun.intensity = 0.35;
+  }
+
+  resetFocus() {
+    this.posTarget.copy(this.homePos);
+    this.lookTarget.copy(this.homeLook);
+    this.spot.visible = false;
+    this.hemi.intensity = 0.75;
+    this.sun.intensity = 1.6;
+  }
+
+  /** 매 프레임 카메라를 목표 위치·시선으로 부드럽게 보간 */
+  updateCamera(dt: number) {
+    const k = 1 - Math.pow(0.004, dt);
+    this.camera.position.lerp(this.posTarget, k);
+    this.lookCur.lerp(this.lookTarget, k);
+    this.camera.lookAt(this.lookCur);
   }
 
   render() {

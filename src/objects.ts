@@ -15,6 +15,8 @@ export class Prop {
   heldBy = new Set<number>();
   /** 뜯긴 팔 전용 — 바닥에서 눈에 띄게 하는 오라 링 */
   aura: THREE.Mesh | null = null;
+  /** 라운드 한정 프롭 (일치 라운드 복제본, 뜯긴 팔) — scatter 시 수거 */
+  temporary = false;
 
   constructor(
     public meta: PropMeta,
@@ -98,7 +100,7 @@ export class PropManager {
     this.scatter(rng);
   }
 
-  private spawn(meta: PropMeta) {
+  private spawn(meta: PropMeta): Prop {
     const body = this.world.physics.createRigidBody(
       RAPIER.RigidBodyDesc.dynamic()
         .setTranslation(0, 2, 0)
@@ -112,6 +114,28 @@ export class PropManager {
     const prop = new Prop(meta, body, collider, mesh);
     this.props.push(prop);
     this.byCollider.set(collider.handle, prop);
+    return prop;
+  }
+
+  /** 라운드 한정 복제본 스폰 (일치 라운드용) — 방 안 랜덤 위치에 떨어진다 */
+  spawnTemp(meta: PropMeta): Prop {
+    const prop = this.spawn(meta);
+    prop.temporary = true;
+    this.placeRandom(prop, Math.random);
+    return prop;
+  }
+
+  countOf(id: string): number {
+    return this.props.filter((p) => p.meta.id === id).length;
+  }
+
+  private placeRandom(prop: Prop, rng: () => number) {
+    const x = (rng() - 0.5) * (ROOM_W - 3);
+    const z = (rng() - 0.5) * (ROOM_D - 3);
+    const y = 0.8 + rng() * 2.2;
+    prop.body.setTranslation({ x, y, z }, true);
+    prop.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+    prop.body.setAngvel({ x: rng() * 2, y: rng() * 4, z: rng() * 2 }, true);
   }
 
   /** 줄다리기에서 뜯긴 팔을 아이템으로 스폰 */
@@ -180,21 +204,16 @@ export class PropManager {
     this.world.physics.removeRigidBody(prop.body);
   }
 
-  /** 라운드 시작 — 프롭 위치를 방 안에 다시 흩뿌림. 뜯긴 팔은 수거된다. */
+  /** 라운드 시작 — 프롭 위치를 방 안에 다시 흩뿌림. 팔·라운드 한정 프롭은 수거된다. */
   scatter(rng: () => number = Math.random) {
-    for (const arm of this.props.filter((p) => p.meta.armOwner !== undefined)) {
-      this.despawn(arm);
+    for (const temp of this.props.filter((p) => p.temporary || p.meta.armOwner !== undefined)) {
+      this.despawn(temp);
     }
     for (const prop of this.props) {
       prop.thrownBy = -1;
       prop.thrownTimer = 0;
       prop.heldBy.clear();
-      const x = (rng() - 0.5) * (ROOM_W - 3);
-      const z = (rng() - 0.5) * (ROOM_D - 3);
-      const y = 0.8 + rng() * 2.2; // 공중에서 우수수 떨어지는 연출
-      prop.body.setTranslation({ x, y, z }, true);
-      prop.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
-      prop.body.setAngvel({ x: rng() * 2, y: rng() * 4, z: rng() * 2 }, true);
+      this.placeRandom(prop, rng); // 공중에서 우수수 떨어지는 연출
     }
   }
 
