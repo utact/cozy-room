@@ -65,6 +65,10 @@ export const THEMES: RoomTheme[] = [
   },
 ];
 
-export function pickTheme(rng: () => number = Math.random): RoomTheme {
+export function pickTheme(id?: string, rng: () => number = Math.random): RoomTheme {
+  if (id) {
+    const found = THEMES.find((t) => t.id === id);
+    if (found) return found;
+  }
   return THEMES[Math.floor(rng() * THEMES.length)];
 }

@@ -16,7 +16,7 @@ export class World3D {
   physics: RAPIER.World;
   eventQueue: RAPIER.EventQueue;
   floorCollider!: RAPIER.Collider;
-  theme: RoomTheme = pickTheme();
+  theme: RoomTheme;
 
   // ── 카메라 리그 — focusOn/resetFocus로 클로즈업 연출 ──
   private hemi!: THREE.HemisphereLight;
@@ -28,7 +28,8 @@ export class World3D {
   private lookTarget = this.homeLook.clone();
   private lookCur = this.homeLook.clone();
 
-  constructor(container: HTMLElement) {
+  constructor(container: HTMLElement, themeId?: string) {
+    this.theme = pickTheme(themeId);
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     this.renderer.setSize(innerWidth, innerHeight);

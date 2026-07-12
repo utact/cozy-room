@@ -177,6 +177,26 @@ const CSS = `
 @keyframes confetti-fall {
   to { transform: translateY(122vh) rotate(760deg); opacity: .75; }
 }
+/* ── 온라인 ── */
+.online-chip { position: absolute; top: 14px; right: 14px; padding: 9px 16px;
+  border-radius: 12px; background: rgba(15,11,28,.85); border: 1px solid rgba(255,255,255,.14);
+  font-size: 13px; line-height: 1.7; pointer-events: auto; max-width: 320px; }
+.online-chip b { color: #ffd98c; }
+.online-chip .code { font-size: 20px; font-weight: 900; letter-spacing: 5px; color: #8ad0ff; }
+.voice-chip { position: absolute; bottom: 14px; right: 14px; padding: 9px 16px;
+  border-radius: 999px; background: rgba(15,11,28,.85); border: 1px solid rgba(255,255,255,.14);
+  font-size: 13px; font-weight: 700; pointer-events: auto; cursor: pointer;
+  display: flex; align-items: center; gap: 8px; }
+.voice-chip:hover { background: rgba(40,32,66,.9); }
+.voice-chip .mic-dot { width: 9px; height: 9px; border-radius: 50%; background: #666; }
+.voice-chip.on .mic-dot { background: #4fbf5e; box-shadow: 0 0 8px #4fbf5e; }
+.voice-chip.muted .mic-dot { background: #d94f4f; }
+.net-overlay { position: absolute; inset: 0; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 12px;
+  background: rgba(16,12,30,.9); z-index: 10; }
+.net-overlay .t { font-size: 30px; font-weight: 900; }
+.net-overlay .s { font-size: 15px; opacity: .75; line-height: 1.8; text-align: center; }
+
 .hidden { display: none !important; }
 `;
 
@@ -219,6 +239,9 @@ export class UI {
   private resultsEl!: HTMLDivElement;
   private eventEl!: HTMLDivElement;
   private tadaEl!: HTMLDivElement;
+  private onlineChip!: HTMLDivElement;
+  private voiceChip!: HTMLDivElement;
+  private overlayEl!: HTMLDivElement;
 
   constructor(container: HTMLElement) {
     const style = document.createElement('style');
@@ -258,6 +281,53 @@ export class UI {
     this.hudEl = this.el('div', 'hud hidden', this.root);
     this.eventEl = this.el('div', 'event-banner hidden', this.root);
     this.tadaEl = this.el('div', 'tada-card', this.root);
+  }
+
+  // ── 온라인 상태/보이스/오버레이 ──
+  setOnlineStatus(html: string | null) {
+    if (!this.onlineChip) this.onlineChip = this.el('div', 'online-chip hidden', this.root);
+    if (html === null) {
+      this.onlineChip.classList.add('hidden');
+    } else {
+      this.onlineChip.classList.remove('hidden');
+      this.onlineChip.innerHTML = html;
+    }
+  }
+
+  initVoiceChip(onClick: () => void) {
+    if (!this.voiceChip) {
+      this.voiceChip = this.el('div', 'voice-chip', this.root);
+      this.voiceChip.addEventListener('click', onClick);
+    }
+    this.setVoiceState('idle', 0);
+  }
+
+  setVoiceState(state: string, peers: number) {
+    if (!this.voiceChip) return;
+    this.voiceChip.classList.remove('on', 'muted');
+    const label =
+      state === 'on' ? `음성 ON · ${peers}명 연결`
+      : state === 'muted' ? '음소거'
+      : state === 'requesting' ? '마이크 요청 중…'
+      : state === 'denied' ? '마이크 거부됨'
+      : '음성 채팅 켜기';
+    if (state === 'on') this.voiceChip.classList.add('on');
+    if (state === 'muted') this.voiceChip.classList.add('muted');
+    this.voiceChip.innerHTML = `<span class="mic-dot"></span>${label} <span class="key">V</span>`;
+  }
+
+  showOverlay(title: string, sub: string) {
+    if (!this.overlayEl) this.overlayEl = this.el('div', 'net-overlay', this.root);
+    this.overlayEl.classList.remove('hidden');
+    this.overlayEl.innerHTML = `<div class="t">${title}</div><div class="s">${sub}</div>`;
+  }
+
+  hideOverlay() {
+    this.overlayEl?.classList.add('hidden');
+  }
+
+  hideResults() {
+    this.resultsEl.classList.add('hidden');
   }
 
   // ── 클로즈업 "따란" 카드 ──

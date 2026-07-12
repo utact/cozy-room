@@ -59,9 +59,19 @@ wss.on('connection', (ws) => {
         room = msg.room.toUpperCase();
         role = 'guest';
         guestId = r.nextGuest++;
+        // 보이스챗 메시 구성을 위해 기존 참가자(호스트=0 포함) 목록을 알려준다
+        const peers = [0, ...r.guests.keys()];
         r.guests.set(guestId, ws);
-        send(ws, { t: 'joined', room, guestId });
+        send(ws, { t: 'joined', room, guestId, peers });
         send(r.host, { t: 'guest-joined', guestId });
+        break;
+      }
+      case 'signal': { // WebRTC 시그널링 중계 (보이스챗) — to: 0=호스트, n=게스트
+        const r = rooms.get(room);
+        if (!r) return;
+        const from = role === 'host' ? 0 : guestId;
+        const dest = msg.to === 0 ? r.host : r.guests.get(msg.to);
+        if (dest) send(dest, { t: 'signal', from, data: msg.data });
         break;
       }
       case 'input': { // 게스트 → 호스트 (InputState)
@@ -74,9 +84,15 @@ wss.on('connection', (ws) => {
         if (r && role === 'host') for (const g of r.guests.values()) send(g, { t: 'state', s: msg.s });
         break;
       }
-      case 'ev': { // 호스트 → 게스트 (사운드·UI 단발 이벤트)
+      case 'ev': { // 호스트 → 게스트 (사운드·UI 단발 이벤트). to 지정 시 해당 게스트에게만
         const r = rooms.get(room);
-        if (r && role === 'host') for (const g of r.guests.values()) send(g, { t: 'ev', e: msg.e });
+        if (!r || role !== 'host') break;
+        if (msg.to !== undefined) {
+          const g = r.guests.get(msg.to);
+          if (g) send(g, { t: 'ev', e: msg.e });
+        } else {
+          for (const g of r.guests.values()) send(g, { t: 'ev', e: msg.e });
+        }
         break;
       }
     }

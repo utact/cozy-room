@@ -12,6 +12,9 @@ import { PROP_CATALOG, LOOKALIKES, type PropMeta } from './catalog';
 import { pickEvent, type EventCtx, type RoundEvent } from './events';
 import { sfx } from './sound';
 import { BotSource } from './bot';
+import { NetChannel, resolveRelayUrl, round2, round3, type Snapshot } from './net';
+import { HostSession, RemoteInputSource, wrapUIForHost, patchSfxForHost, patchCameraForHost } from './net-host';
+import { VoiceChat } from './voice';
 import type { AssetLibrary } from './assets';
 
 // ?fast — 개발·시연용 단축 라운드
@@ -67,7 +70,90 @@ export class Game {
       if (e.code === 'KeyR') this.restartRequested = true;
       if (e.code === 'KeyK' && this.state === 'menu') this.startRebind();
       if (e.code === 'KeyB' && this.state === 'menu') this.addBot();
+      if (e.code === 'KeyO' && this.state === 'menu') this.startHosting();
+      if (e.code === 'KeyV') this.voice?.toggle();
     });
+  }
+
+  // ── 온라인 호스팅 ────────────────────────────────────
+  private hostSession: HostSession | null = null;
+  private voice: VoiceChat | null = null;
+
+  private async startHosting() {
+    if (this.hostSession) return;
+    const relayUrl = resolveRelayUrl();
+    if (!relayUrl) {
+      this.ui.setOnlineStatus(
+        '<b>온라인 불가</b><br/>릴레이 서버가 설정되지 않았습니다.<br/>URL에 <b>?relay=wss://…</b> 를 붙이거나 docs/5-온라인모드-설계.md 참고',
+      );
+      return;
+    }
+    try {
+      this.ui.setOnlineStatus('릴레이 서버 접속 중…');
+      const channel = await NetChannel.connect(relayUrl);
+      const code = await channel.createRoom();
+      this.hostSession = new HostSession(channel, {
+        addRemotePlayer: (src) => this.addRemotePlayer(src),
+        buildSnapshot: () => this.buildSnapshot(),
+        themeId: this.world.theme.id,
+        onGuestLeft: () => this.ui.pulseEvent('게스트 연결 끊김'),
+      });
+      this.ui = wrapUIForHost(this.ui, this.hostSession);
+      patchSfxForHost(this.hostSession);
+      patchCameraForHost(this.world, this.hostSession);
+      this.voice = new VoiceChat(channel, 0);
+      this.voice.onStateChange = (s, n) => this.ui.setVoiceState(s, n);
+      this.ui.initVoiceChip(() => this.voice?.toggle());
+      const joinUrl = `${location.origin}${location.pathname}?join=${code}&relay=${encodeURIComponent(relayUrl)}`;
+      this.ui.setOnlineStatus(
+        `<b>온라인 방</b> <span class="code">${code}</span><br/>참가 주소: ${joinUrl}`,
+      );
+      channel.onClose(() => {
+        this.ui.setOnlineStatus('<b>릴레이 연결 끊김</b> — 온라인 비활성화');
+        this.hostSession?.dispose();
+        this.hostSession = null;
+      });
+    } catch (err) {
+      this.ui.setOnlineStatus(`<b>온라인 실패</b><br/>${err instanceof Error ? err.message : err}`);
+    }
+  }
+
+  private addRemotePlayer(source: RemoteInputSource): number | null {
+    if (this.state !== 'menu' || this.players.length >= 4) return null;
+    this.joinedSources.add(source.id);
+    this.addPlayer(source);
+    return this.players.length - 1;
+  }
+
+  /** 게스트 미러링용 상태 스냅샷 (20Hz 송출) */
+  buildSnapshot(): Snapshot {
+    return {
+      pl: this.players.map((p) => {
+        const t = p.body.translation();
+        return {
+          i: p.id,
+          p: [round2(t.x), round2(t.y), round2(t.z)] as [number, number, number],
+          yw: round3(p.yaw),
+          hd: (p.held ? 1 : 0) as 0 | 1,
+          ms: p.missingArmSides,
+          ind: p.indicatorPos
+            ? ([round2(p.indicatorPos.x), round2(p.indicatorPos.z)] as [number, number])
+            : (0 as const),
+        };
+      }),
+      pr: this.props.props.map((pr) => {
+        const t = pr.body.translation();
+        const q = pr.body.rotation();
+        return {
+          k: pr.uid,
+          id: pr.meta.id,
+          p: [round2(t.x), round2(t.y), round2(t.z)] as [number, number, number],
+          q: [round3(q.x), round3(q.y), round3(q.z), round3(q.w)] as [number, number, number, number],
+          au: pr.meta.armOwner !== undefined ? pr.meta.color : 0,
+          cl: (pr.cloaked ? 1 : 0) as 0 | 1,
+        };
+      }),
+    };
   }
 
   private botCount = 0;
@@ -90,7 +176,7 @@ export class Game {
     this.ui.setControlsHint(
       `<b>P1</b> ${keys(p1)}<br/><b>P2</b> ${keys(p2)}<br/>` +
       `게임패드: 스틱 이동 · A 잡기 · B 점프 (연결하면 자동 인식)<br/>` +
-      `${kbd('B')} AI 봇 추가 &nbsp;|&nbsp; ${kbd('K')} 키 변경`,
+      `${kbd('B')} AI 봇 추가 · ${kbd('O')} 온라인 방 만들기 · ${kbd('V')} 음성 채팅 · ${kbd('K')} 키 변경`,
     );
   }
 
@@ -135,7 +221,16 @@ export class Game {
       case 'judging': this.tickPhysicsOnly(dt); break;
       case 'results':
         this.tickPhysicsOnly(dt);
-        if (this.restartRequested) location.reload();
+        if (this.restartRequested) {
+          // 온라인 방은 세션을 유지해야 하므로 리로드 대신 같은 방에서 재경기
+          if (this.hostSession) {
+            this.restartRequested = false;
+            this.ui.hideResults();
+            this.beginMatch();
+          } else {
+            location.reload();
+          }
+        }
         break;
     }
     this.restartRequested = this.state === 'results' && this.restartRequested;

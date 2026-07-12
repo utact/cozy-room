@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { ROOM_W, ROOM_D, type World3D } from './world';
 import type { Player } from './player';
 import type { Prop, PropManager } from './objects';
+import { cloakObject, uncloakObject } from './visuals';
 import { sfx } from './sound';
 
 export interface EventCtx {
@@ -164,46 +165,37 @@ class MysteryEvent implements RoundEvent {
   title = '미스터리 룸!';
   desc = '물건이 전부 실루엣이다. 직접 잡아야 정체를 안다!';
   private saved = new Map<THREE.Mesh, THREE.Material | THREE.Material[]>();
-  private cloaked = new Set<Prop>();
-  private silhouette = new THREE.MeshStandardMaterial({ color: 0x232030, roughness: 0.95 });
+  private active: Prop[] = [];
 
   start(ctx: EventCtx) {
     for (const prop of ctx.props.props) {
       if (prop.meta.armOwner !== undefined) continue; // 팔은 누구 것인지 보여야 한다
-      prop.mesh.traverse((o) => {
-        const mesh = o as THREE.Mesh;
-        if (mesh.isMesh) {
-          this.saved.set(mesh, mesh.material);
-          mesh.material = this.silhouette;
-        }
-      });
-      this.cloaked.add(prop);
+      cloakObject(prop.mesh, this.saved);
+      prop.cloaked = true;
+      this.active.push(prop);
     }
   }
 
   tick(ctx: EventCtx) {
     // 잡는 순간 정체 공개 (이후 계속 공개 상태 유지)
     for (const prop of ctx.props.props) {
-      if (prop.heldBy.size > 0 && this.cloaked.has(prop)) this.reveal(prop);
+      if (prop.heldBy.size > 0 && prop.cloaked) {
+        uncloakObject(prop.mesh, this.saved);
+        prop.cloaked = false;
+        sfx.reveal(70);
+      }
     }
   }
 
-  private reveal(prop: Prop) {
-    prop.mesh.traverse((o) => {
-      const mesh = o as THREE.Mesh;
-      if (mesh.isMesh && this.saved.has(mesh)) {
-        mesh.material = this.saved.get(mesh)!;
-        this.saved.delete(mesh);
-      }
-    });
-    this.cloaked.delete(prop);
-    sfx.reveal(70);
-  }
-
   end() {
-    for (const [mesh, mat] of this.saved) mesh.material = mat;
+    for (const prop of this.active) {
+      if (prop.cloaked) {
+        uncloakObject(prop.mesh, this.saved);
+        prop.cloaked = false;
+      }
+    }
     this.saved.clear();
-    this.cloaked.clear();
+    this.active = [];
   }
 }
 

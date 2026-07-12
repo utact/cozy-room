@@ -2,13 +2,20 @@
 
 import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
-import { PROP_CATALOG, type PropMeta, type PropShape } from './catalog';
+import { PROP_CATALOG, type PropMeta } from './catalog';
 import { ROOM_W, ROOM_D, type World3D } from './world';
+import { buildProceduralVisual, buildArmVisual, buildAuraRing } from './visuals';
 import type { AssetLibrary } from './assets';
 
 const THROWN_WINDOW = 1.6; // 이 시간 안에 상대를 맞히면 '뺏기' 성립 (초)
 
+let nextPropUid = 1;
+
 export class Prop {
+  /** 네트워크 동기화용 고유 id */
+  readonly uid = nextPropUid++;
+  /** 미스터리 룸 — 실루엣 상태 (게스트 미러링을 위해 플래그로 관리) */
+  cloaked = false;
   thrownBy = -1; // 던진 플레이어 id (-1 = 없음)
   thrownTimer = 0;
   /** 현재 이 프롭을 잡고 있는 플레이어 id 집합 (동시 그랩 = 줄다리기) */
@@ -29,37 +36,6 @@ export class Prop {
     const t = this.body.translation();
     return new THREE.Vector3(t.x, t.y, t.z);
   }
-}
-
-function buildGeometry(shape: PropShape, size: [number, number, number]): THREE.BufferGeometry {
-  const [sx, sy, sz] = size;
-  switch (shape) {
-    case 'box': return new THREE.BoxGeometry(sx, sy, sz);
-    case 'ball': return new THREE.SphereGeometry(sx, 18, 14);
-    case 'cylinder': return new THREE.CylinderGeometry(sx, sx, sy * 2, 18);
-    case 'cone': return new THREE.ConeGeometry(sx, sy * 2, 18);
-  }
-}
-
-/** parts 조합 또는 단일 프리미티브로 프롭 비주얼 생성 */
-function buildProceduralVisual(meta: PropMeta): THREE.Object3D {
-  const makeMesh = (shape: PropShape, size: [number, number, number], color: number) => {
-    const mesh = new THREE.Mesh(
-      buildGeometry(shape, size),
-      new THREE.MeshStandardMaterial({ color, roughness: 0.7 }),
-    );
-    mesh.castShadow = mesh.receiveShadow = true;
-    return mesh;
-  };
-  if (!meta.parts) return makeMesh(meta.shape, meta.size, meta.color);
-  const group = new THREE.Group();
-  for (const part of meta.parts) {
-    const mesh = makeMesh(part.shape, part.size, part.color ?? meta.color);
-    mesh.position.set(...part.pos);
-    if (part.rot) mesh.rotation.set(...part.rot);
-    group.add(mesh);
-  }
-  return group;
 }
 
 function buildColliderDesc(meta: PropMeta): RAPIER.ColliderDesc {
@@ -165,25 +141,10 @@ export class PropManager {
         .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS),
       body,
     );
-    // 팔 비주얼 — 캡슐 + 손끝 구
-    const group = new THREE.Group();
-    const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.6 });
-    const limb = new THREE.Mesh(new THREE.CapsuleGeometry(0.085, 0.24, 4, 10), mat);
-    limb.castShadow = true;
-    group.add(limb);
-    const fist = new THREE.Mesh(new THREE.SphereGeometry(0.1, 10, 8), mat);
-    fist.position.y = 0.19;
-    fist.castShadow = true;
-    group.add(fist);
+    // 팔 비주얼 + 오라 링 (바닥에서 맥동하며 주인 색으로 빛난다)
+    const group = buildArmVisual(color);
     this.world.scene.add(group);
-    // 오라 링 — 바닥에서 맥동하며 주인 색으로 빛난다
-    const aura = new THREE.Mesh(
-      new THREE.RingGeometry(0.3, 0.46, 26),
-      new THREE.MeshBasicMaterial({
-        color, transparent: true, opacity: 0.6, side: THREE.DoubleSide, depthWrite: false,
-      }),
-    );
-    aura.rotation.x = -Math.PI / 2;
+    const aura = buildAuraRing(color);
     this.world.scene.add(aura);
     // 뜯기는 임펄스 — 위로 팝
     body.setLinvel({ x: (Math.random() - 0.5) * 3, y: 4.2, z: (Math.random() - 0.5) * 3 }, true);

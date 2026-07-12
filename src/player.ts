@@ -8,10 +8,9 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import type { InputSource, InputState } from './input';
 import type { World3D } from './world';
 import type { Prop, PropManager } from './objects';
+import { createPlayerVisual, poseArms, CAPSULE_HALF, CAPSULE_R } from './visuals';
 import { sfx } from './sound';
 
-const CAPSULE_HALF = 0.42;
-const CAPSULE_R = 0.34;
 const MOVE_SPEED = 4.6;
 const YAW_GAIN = 11;
 const HAND_LOCAL = { x: 0, y: 0.15, z: 0.62 }; // 몸 기준 손 위치 (앞)
@@ -22,7 +21,7 @@ export const PLAYER_NAMES = ['1P', '2P', '3P', '4P'];
 export class Player {
   body: RAPIER.RigidBody;
   collider: RAPIER.Collider;
-  group = new THREE.Group();
+  group: THREE.Group;
   held: Prop | null = null;
   private joint: RAPIER.ImpulseJoint | null = null;
   private targetYaw = 0;
@@ -34,13 +33,20 @@ export class Player {
   private missingArms = new Set<'L' | 'R'>();
   /** 직전 프레임 이동 입력 크기 — 줄다리기 힘 계산용 */
   lastMoveMag = 0;
+  /** 현재 잡기 후보 프롭 위치 (네트워크 동기화용) */
+  indicatorPos: { x: number; z: number } | null = null;
   /** 잡기 가능한 프롭 아래 표시되는 링 */
   private indicator: THREE.Mesh;
-  private arms: { L: THREE.Mesh; R: THREE.Mesh } = {} as { L: THREE.Mesh; R: THREE.Mesh };
-  private stubs: { L: THREE.Mesh; R: THREE.Mesh } = {} as { L: THREE.Mesh; R: THREE.Mesh };
+  private arms: { L: THREE.Mesh; R: THREE.Mesh };
+  private stubs: { L: THREE.Mesh; R: THREE.Mesh };
 
   get armless(): boolean {
     return this.missingArms.size > 0;
+  }
+
+  /** 뜯긴 팔 상태를 'L'/'R'/'LR' 문자열로 (네트워크 동기화용) */
+  get missingArmSides(): string {
+    return (this.missingArms.has('L') ? 'L' : '') + (this.missingArms.has('R') ? 'R' : '');
   }
 
   constructor(
@@ -65,7 +71,10 @@ export class Player {
       this.body,
     );
 
-    this.buildMesh();
+    const visual = createPlayerVisual(PLAYER_COLORS[this.id]);
+    this.group = visual.group;
+    this.arms = visual.arms;
+    this.stubs = visual.stubs;
     world.scene.add(this.group);
 
     this.indicator = new THREE.Mesh(
@@ -83,55 +92,12 @@ export class Player {
     world.scene.add(this.indicator);
   }
 
-  private buildMesh() {
-    const color = PLAYER_COLORS[this.id];
-    const bodyMat = new THREE.MeshStandardMaterial({ color, roughness: 0.6 });
-    const capsule = new THREE.Mesh(
-      new THREE.CapsuleGeometry(CAPSULE_R, CAPSULE_HALF * 2, 6, 16),
-      bodyMat,
-    );
-    capsule.castShadow = true;
-    this.group.add(capsule);
-    // 눈 — 진행 방향(+z) 표시 겸 캐릭터성
-    for (const ex of [-0.13, 0.13]) {
-      const eye = new THREE.Mesh(
-        new THREE.SphereGeometry(0.09, 10, 8),
-        new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3 }),
-      );
-      eye.position.set(ex, 0.34, CAPSULE_R * 0.82);
-      this.group.add(eye);
-      const pupil = new THREE.Mesh(
-        new THREE.SphereGeometry(0.045, 8, 6),
-        new THREE.MeshStandardMaterial({ color: 0x1b1b22 }),
-      );
-      pupil.position.set(ex, 0.34, CAPSULE_R * 0.82 + 0.06);
-      this.group.add(pupil);
-    }
-    // 짤막한 팔 — 물건을 들면 앞으로 올라간다. 줄다리기에서 뜯길 수 있다.
-    const armMat = new THREE.MeshStandardMaterial({ color, roughness: 0.6 });
-    const stubMat = new THREE.MeshStandardMaterial({ color: 0x8e3423, roughness: 0.85 });
-    for (const [key, side] of [['L', -1], ['R', 1]] as const) {
-      const arm = new THREE.Mesh(new THREE.CapsuleGeometry(0.085, 0.24, 4, 10), armMat);
-      arm.castShadow = true;
-      arm.position.set(side * (CAPSULE_R + 0.06), 0.12, 0.02);
-      arm.rotation.z = side * 0.55;
-      this.group.add(arm);
-      this.arms[key] = arm;
-      // 뜯긴 자리 스텁 — 팔이 없을 때만 보인다
-      const stub = new THREE.Mesh(new THREE.SphereGeometry(0.07, 10, 8), stubMat);
-      stub.position.set(side * (CAPSULE_R + 0.02), 0.2, 0.02);
-      stub.visible = false;
-      this.group.add(stub);
-      this.stubs[key] = stub;
-    }
-  }
-
   get position(): THREE.Vector3 {
     const t = this.body.translation();
     return new THREE.Vector3(t.x, t.y, t.z);
   }
 
-  private get yaw(): number {
+  get yaw(): number {
     const r = this.body.rotation();
     const q = new THREE.Quaternion(r.x, r.y, r.z, r.w);
     const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(q);
@@ -195,21 +161,17 @@ export class Player {
     this.group.quaternion.set(r.x, r.y, r.z, r.w);
 
     // 팔 자세 — 들고 있으면 앞으로 뻗기
-    for (const [key, side] of [['L', -1], ['R', 1]] as const) {
-      const targetX = this.held ? -1.15 : 0;
-      const targetZ = this.held ? side * 0.15 : side * 0.55;
-      const arm = this.arms[key];
-      arm.rotation.x += (targetX - arm.rotation.x) * 0.2;
-      arm.rotation.z += (targetZ - arm.rotation.z) * 0.2;
-    }
+    poseArms(this.arms, this.held !== null);
 
     // 그랩 가능 표시 링
+    this.indicatorPos = null;
     if (!this.held && !this.frozen) {
       const candidate = this.findCandidate();
       if (candidate) {
         const cp = candidate.position;
         this.indicator.position.set(cp.x, 0.04 + this.id * 0.012, cp.z);
         this.indicator.visible = true;
+        this.indicatorPos = { x: cp.x, z: cp.z };
       } else {
         this.indicator.visible = false;
       }
