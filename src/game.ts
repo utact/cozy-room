@@ -38,7 +38,7 @@ export class Game {
   private props: PropManager;
   private input = new InputManager();
   private ui: UI;
-  private judge = createJudge();
+  private judge = createJudge(resolveRelayUrl());
 
   private players: Player[] = [];
   private playersByCollider = new Map<number, Player>();

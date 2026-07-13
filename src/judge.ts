@@ -260,8 +260,19 @@ export class RemoteJudge implements Judge {
   }
 }
 
-/** URL ?judge=https://... 로 원격 심사 엔드포인트 지정 가능 */
-export function createJudge(): Judge {
-  const endpoint = new URLSearchParams(location.search).get('judge');
-  return endpoint ? new RemoteJudge(endpoint) : new LocalJudge();
+/**
+ * 심사 엔드포인트 결정:
+ * 1) ?judge=URL 명시 → 그 주소
+ * 2) 릴레이 서버가 설정되어 있으면 릴레이의 /judge (NVIDIA LLM 프록시)
+ * 3) 없으면 로컬 심사기
+ * 원격은 실패 시 항상 로컬로 폴백하므로 안전하다.
+ */
+export function createJudge(relayUrl: string | null): Judge {
+  const explicit = new URLSearchParams(location.search).get('judge');
+  if (explicit) return new RemoteJudge(explicit);
+  if (relayUrl) {
+    const httpBase = relayUrl.replace(/^ws/, 'http').replace(/\/$/, '');
+    return new RemoteJudge(`${httpBase}/judge`);
+  }
+  return new LocalJudge();
 }
