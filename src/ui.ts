@@ -39,21 +39,63 @@ const CSS = `
 .subtitle { font-size: 17px; opacity: .9; font-weight: 600;
   text-shadow: 0 2px 8px rgba(0,0,0,.6); }
 
-.joinrow { display: flex; gap: 14px; margin-top: 6px; }
-.joincard { width: 158px; padding: 16px 10px 13px; border-radius: 20px; text-align: center;
-  display: flex; flex-direction: column; align-items: center; gap: 8px;
+/* 모드 선택 (첫 화면) */
+.mode-stack { display: flex; flex-direction: column; gap: 13px; margin-top: 6px; }
+.mode-btn { pointer-events: auto; cursor: pointer; display: flex; align-items: center; gap: 18px;
+  width: min(430px, 86vw); padding: 15px 22px; border-radius: 18px; text-align: left;
+  background: linear-gradient(165deg, rgba(255,255,255,.1), rgba(255,255,255,.04));
+  border: 1px solid rgba(255,255,255,.14); backdrop-filter: blur(10px);
+  transition: transform .18s, border-color .18s; }
+.mode-btn:hover { transform: translateY(-3px) scale(1.015); border-color: #ffcf6b; }
+.mode-btn .m-title { font-size: 18px; font-weight: 900; }
+.mode-btn .m-desc { font-size: 12px; opacity: .62; margin-top: 2px; }
+.menu-foot { margin-top: 10px; font-size: 12.5px; opacity: .7; display: flex; gap: 18px; }
+
+/* 로비 (둘째 화면) — 컴팩트, 100% 줌 720p 수납 */
+.lobby-top { display: flex; align-items: baseline; gap: 14px; font-weight: 900; font-size: 21px;
+  text-shadow: 0 2px 8px rgba(0,0,0,.6); }
+.lobby-top em { color: #ffcf6b; font-style: normal; }
+.lobby-top .back { pointer-events: auto; cursor: pointer; opacity: .65; font-size: 12.5px; font-weight: 600; }
+.lobby-top .back:hover { opacity: 1; }
+.joinrow { display: flex; gap: 12px; }
+.joincard { width: 128px; padding: 12px 8px 10px; border-radius: 16px; text-align: center;
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
   background: linear-gradient(165deg, rgba(255,255,255,.07), rgba(255,255,255,.02));
   border: 2px dashed rgba(255,255,255,.18); backdrop-filter: blur(10px);
   transition: transform .3s cubic-bezier(.2,1.4,.4,1), box-shadow .3s, border-color .3s; }
-.joincard .ready { font-size: 10px; letter-spacing: 3px; font-weight: 900;
-  color: #4fbf5e; text-shadow: 0 0 12px rgba(79,191,94,.6); min-height: 13px; }
+.joincard .ready { font-size: 9px; letter-spacing: 3px; font-weight: 900;
+  color: #4fbf5e; text-shadow: 0 0 12px rgba(79,191,94,.6); min-height: 11px; }
+.joincard .tag { font-size: 10px; opacity: .6; min-height: 12px; letter-spacing: 1px; font-weight: 700; }
 .joincard.joined { border-style: solid;
   background: linear-gradient(165deg, rgba(255,255,255,.13), rgba(255,255,255,.05));
-  transform: translateY(-6px); box-shadow: 0 14px 32px rgba(0,0,0,.45); }
+  transform: translateY(-4px); box-shadow: 0 12px 28px rgba(0,0,0,.45); }
 .joincard.joined .avatar { animation: avatar-float 2.6s ease-in-out infinite; }
-@keyframes avatar-float { 50% { transform: translateY(-5px); } }
+@keyframes avatar-float { 50% { transform: translateY(-4px); } }
 .joincard:not(.joined) { animation: slot-pulse 2.4s ease-in-out infinite; }
 @keyframes slot-pulse { 50% { border-color: rgba(255,255,255,.34); } }
+.joincard .avatar { width: 42px; height: 52px; border-radius: 21px; }
+.joincard .avatar .eye { top: 13px; width: 9px; height: 11px; }
+.joincard .avatar .eye.l { left: 9px; } .joincard .avatar .eye.r { right: 9px; }
+.joincard .who { font-size: 16px; }
+
+/* 초대 코드 모달 */
+.code-modal { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  background: rgba(10,8,20,.72); z-index: 30; pointer-events: auto; }
+.code-card { background: linear-gradient(180deg, #241b44, #191233); border: 1px solid rgba(255,255,255,.16);
+  border-radius: 20px; padding: 26px 32px; display: flex; flex-direction: column; gap: 14px;
+  align-items: center; box-shadow: 0 20px 60px rgba(0,0,0,.6); }
+.code-card .cc-title { font-size: 18px; font-weight: 900; }
+.code-card input { width: 190px; font-size: 30px; letter-spacing: 10px; text-align: center;
+  text-transform: uppercase; background: rgba(255,255,255,.08); font-family: inherit;
+  border: 1px solid rgba(255,255,255,.22); border-radius: 12px; color: #fff; padding: 8px 0 8px 10px;
+  font-weight: 900; outline: none; }
+.code-card input:focus { border-color: #8ad0ff; }
+.code-card .cc-err { font-size: 12.5px; color: #ff8a7a; min-height: 16px; }
+.code-actions { display: flex; gap: 10px; }
+.btn { pointer-events: auto; cursor: pointer; padding: 9px 24px; border-radius: 12px; font-weight: 800;
+  background: linear-gradient(135deg, #ff9a5b, #e4573d); border: none; color: #fff; font-size: 14.5px;
+  font-family: inherit; }
+.btn.ghost { background: rgba(255,255,255,.1); }
 .avatar { width: 50px; height: 62px; border-radius: 25px; position: relative; flex: none;
   background: #57506e; box-shadow: inset -6px -8px 0 rgba(0,0,0,.16); }
 .avatar .eye { position: absolute; top: 16px; width: 11px; height: 13px;
@@ -302,11 +344,35 @@ export class UI {
   /** 생성형 아트 로드 성공 시 채워지는 URL (심사 패널 등에서 사용) */
   private judgeArtUrl: string | null = null;
 
+  private modeEl!: HTMLDivElement;
+  private lobbyEl!: HTMLDivElement;
+
   private buildMenu() {
     this.menuEl = this.el('div', 'screen dim', this.root);
     const backdrop = this.el('div', 'menu-backdrop', this.menuEl);
-    const logo = this.el('div', 'logo', this.menuEl,
+
+    // ── 1단: 모드 선택 ──
+    this.modeEl = this.el('div', 'screen', this.menuEl);
+    this.modeEl.style.position = 'relative';
+    this.modeEl.style.inset = 'auto';
+    const logo = this.el('div', 'logo', this.modeEl,
       `<div class="big">잡아라! <em>코지 룸</em></div><div class="ribbon">1~4인 물리 난투!</div>`);
+    this.el('div', 'subtitle', this.modeEl, '주제에 맞는 물건을 잡아라 — 뺏고, 던지고, AI 심사를 받아라!');
+    this.el('div', 'mode-stack', this.modeEl);
+    this.el('div', 'menu-foot', this.modeEl,
+      `<span>${kbd('V')} 음성 채팅</span><span>${kbd('K')} 키 변경</span>`);
+
+    // ── 2단: 로비 ──
+    this.lobbyEl = this.el('div', 'screen hidden', this.menuEl);
+    this.lobbyEl.style.position = 'relative';
+    this.lobbyEl.style.inset = 'auto';
+    this.el('div', 'lobby-top', this.lobbyEl,
+      `잡아라! <em>코지 룸</em><span class="back">← 뒤로 (Esc)</span>`);
+    this.joinRow = this.el('div', 'joinrow', this.lobbyEl);
+    this.controlsHint = this.el('div', 'hint', this.lobbyEl);
+    this.rebindPrompt = this.el('div', 'rebind-prompt', this.lobbyEl);
+    this.startHint = this.el('div', 'start-hint hidden', this.lobbyEl, `${kbd('R')} 눌러 시작!`);
+
     // 생성형 아트 — 로드되면 텍스트 로고를 이미지로, 배경에 키 비주얼
     loadArt(ART.logo, (url) => {
       if (url) logo.querySelector('.big')!.outerHTML = `<img class="logo-img" src="${url}" alt="잡아라! 코지 룸" />`;
@@ -320,11 +386,70 @@ export class UI {
     loadArt(ART.judge, (url) => {
       this.judgeArtUrl = url;
     });
-    this.el('div', 'subtitle', this.menuEl, '주제에 맞는 물건을 잡아라 — 뺏고, 던지고, AI 심사를 받아라!');
-    this.joinRow = this.el('div', 'joinrow', this.menuEl);
-    this.controlsHint = this.el('div', 'hint', this.menuEl);
-    this.rebindPrompt = this.el('div', 'rebind-prompt', this.menuEl);
-    this.startHint = this.el('div', 'start-hint hidden', this.menuEl, `${kbd('R')} 눌러 시작!`);
+  }
+
+  /** 모드 선택 화면 — 로컬 / 온라인 방 만들기 / 초대 코드 입장 */
+  showModeSelect(handlers: { local: () => void; host: () => void; join: () => void }) {
+    this.menuEl.classList.remove('hidden');
+    this.modeEl.classList.remove('hidden');
+    this.lobbyEl.classList.add('hidden');
+    const stack = this.modeEl.querySelector('.mode-stack')!;
+    stack.innerHTML = '';
+    const defs = [
+      { key: '1', title: '로컬에서 플레이', desc: '한 화면에서 키보드·패드로 1~4인 (AI 봇 추가 가능)', act: handlers.local },
+      { key: '2', title: '온라인 방 만들기', desc: '방 코드를 만들어 친구를 초대 (보이스챗 지원)', act: handlers.host },
+      { key: '3', title: '초대 코드 입장', desc: '친구에게 받은 4자리 코드로 접속', act: handlers.join },
+    ];
+    for (const d of defs) {
+      const btn = document.createElement('button');
+      btn.className = 'mode-btn';
+      btn.innerHTML = `<span class="key" style="font-size:16px;padding:6px 13px">${d.key}</span>` +
+        `<span><span class="m-title">${d.title}</span><br/><span class="m-desc">${d.desc}</span></span>`;
+      btn.addEventListener('click', d.act);
+      stack.appendChild(btn);
+    }
+  }
+
+  /** 로비 화면으로 전환 */
+  showLobbyScreen(onBack: (() => void) | null) {
+    this.menuEl.classList.remove('hidden');
+    this.modeEl.classList.add('hidden');
+    this.lobbyEl.classList.remove('hidden');
+    const back = this.lobbyEl.querySelector('.back') as HTMLElement;
+    back.style.display = onBack ? '' : 'none';
+    back.onclick = onBack;
+  }
+
+  /** 초대 코드 입력 모달 — 입력 중 키가 게임으로 새지 않게 전파 차단 */
+  promptJoinCode(onSubmit: (code: string) => string | null, onCancel: () => void) {
+    const modal = this.el('div', 'code-modal', this.root);
+    modal.innerHTML =
+      `<div class="code-card"><div class="cc-title">초대 코드 입장</div>` +
+      `<input maxlength="4" placeholder="CODE" autocomplete="off" spellcheck="false" />` +
+      `<div class="cc-err"></div>` +
+      `<div class="code-actions"><button class="btn ghost">취소 (Esc)</button><button class="btn">입장</button></div></div>`;
+    const input = modal.querySelector('input')!;
+    const err = modal.querySelector('.cc-err')!;
+    const [cancelBtn, okBtn] = modal.querySelectorAll('button');
+    const close = () => modal.remove();
+    const submit = () => {
+      const code = input.value.trim().toUpperCase();
+      if (code.length !== 4) {
+        err.textContent = '코드는 4자리입니다';
+        return;
+      }
+      const error = onSubmit(code);
+      if (error) err.textContent = error;
+      else close();
+    };
+    input.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key === 'Enter') submit();
+      if (e.key === 'Escape') { close(); onCancel(); }
+    });
+    cancelBtn.addEventListener('click', () => { close(); onCancel(); });
+    okBtn.addEventListener('click', submit);
+    setTimeout(() => input.focus(), 50);
   }
 
   private buildGameHud() {
@@ -421,8 +546,11 @@ export class UI {
     this.rebindPrompt.textContent = text ?? '';
   }
 
-  showMenu(joined: { label: string; color: number; name: string }[], canStart: boolean) {
+  showMenu(joined: { tag: string; color: number; name: string }[], canStart: boolean) {
+    // 게스트(중계 수신 포함)에서도 항상 로비 뷰가 보이도록
     this.menuEl.classList.remove('hidden');
+    this.modeEl.classList.add('hidden');
+    this.lobbyEl.classList.remove('hidden');
     this.joinRow.innerHTML = '';
     for (let i = 0; i < 4; i++) {
       const j = joined[i];
@@ -432,11 +560,11 @@ export class UI {
         card.style.borderColor = colorHex(j.color);
         card.innerHTML =
           `<div class="ready">READY!</div>${avatarHtml(j.color)}` +
-          `<div class="who" style="color:${colorHex(j.color)}">${j.name}</div><div class="src">${j.label}</div>`;
+          `<div class="who" style="color:${colorHex(j.color)}">${j.name}</div><div class="tag">${j.tag}</div>`;
       } else {
         card.innerHTML =
           `<div class="ready"></div>${avatarHtml(null)}` +
-          `<div class="who" style="opacity:.4">?</div><div class="src">잡기 버튼을 눌러<br/>참가</div>`;
+          `<div class="who" style="opacity:.4">?</div><div class="tag">잡기 버튼으로 참가</div>`;
       }
       this.joinRow.appendChild(card);
     }

@@ -2,3 +2,7 @@ node_modules
 dist
 .DS_Store
 *.log
+
+# 비밀키 — 절대 커밋 금지
+server/.env
+.env

@@ -66,14 +66,60 @@ export class Game {
     };
     this.ui = new UI(container);
     this.refreshControlsHint();
+    this.showModeMenu();
     window.addEventListener('keydown', (e) => {
       if (this.rebinding) return;
       if (e.code === 'KeyR') this.restartRequested = true;
-      if (e.code === 'KeyK' && this.state === 'menu') this.startRebind();
-      if (e.code === 'KeyB' && this.state === 'menu') this.addBot();
-      if (e.code === 'KeyO' && this.state === 'menu') this.startHosting();
       if (e.code === 'KeyV') this.voice?.toggle();
+      if (this.state !== 'menu') return;
+      if (this.menuPhase === 'mode') {
+        if (e.code === 'Digit1') this.enterLobby();
+        if (e.code === 'Digit2') this.hostAndEnterLobby();
+        if (e.code === 'Digit3') this.openJoinPrompt();
+        if (e.code === 'KeyK') {
+          this.enterLobby();
+          this.startRebind();
+        }
+      } else {
+        if (e.code === 'KeyK') this.startRebind();
+        if (e.code === 'KeyB') this.addBot();
+        if (e.code === 'Escape' && !this.hostSession) this.showModeMenu();
+      }
     });
+  }
+
+  // ── 메뉴 흐름: 모드 선택 → 로비 ──────────────────────
+  private menuPhase: 'mode' | 'lobby' = 'mode';
+
+  private showModeMenu() {
+    this.menuPhase = 'mode';
+    this.ui.showModeSelect({
+      local: () => this.enterLobby(),
+      host: () => this.hostAndEnterLobby(),
+      join: () => this.openJoinPrompt(),
+    });
+  }
+
+  private enterLobby() {
+    this.menuPhase = 'lobby';
+    this.ui.showLobbyScreen(this.hostSession ? null : () => this.showModeMenu());
+  }
+
+  private async hostAndEnterLobby() {
+    await this.startHosting();
+    if (this.hostSession) this.enterLobby();
+  }
+
+  private openJoinPrompt() {
+    this.ui.promptJoinCode(
+      (code) => {
+        const relay = resolveRelayUrl();
+        if (!relay) return '릴레이 서버가 설정되지 않았습니다 (?relay=주소 필요)';
+        location.href = `${location.pathname}?join=${code}&relay=${encodeURIComponent(relay)}`;
+        return null;
+      },
+      () => {},
+    );
   }
 
   // ── 온라인 호스팅 ────────────────────────────────────
@@ -184,8 +230,7 @@ export class Game {
       row('패드', '#e4b53d', '스틱', kbd('A'), kbd('B')) +
       `</div>` +
       `<div class="ctl-meta">` +
-      `<span>${kbd('B')} 봇 추가</span><span>${kbd('O')} 온라인 방</span>` +
-      `<span>${kbd('V')} 음성 채팅</span><span>${kbd('K')} 키 변경</span>` +
+      `<span>${kbd('B')} AI 봇 추가</span><span>${kbd('V')} 음성 채팅</span><span>${kbd('K')} 키 변경</span>` +
       `</div>`,
     );
   }
@@ -256,28 +301,39 @@ export class Game {
   // ── 메뉴: 소스별 액션 버튼으로 참가 ──
   private joinedSources = new Set<string>();
 
+  /** 참가 카드에 표시할 입력 소스 태그 */
+  private sourceTag(id: string): string {
+    if (id.startsWith('bot')) return 'AI 봇';
+    if (id.startsWith('net')) return '온라인';
+    if (id.startsWith('pad')) return '게임패드';
+    return '키보드';
+  }
+
   private tickMenu() {
-    if (!this.rebinding) {
-      for (const src of this.input.allSources()) {
-        const st = src.getState();
-        if (st.actionPressed && !this.joinedSources.has(src.id) && this.players.length < 4) {
-          this.joinedSources.add(src.id);
-          this.addPlayer(src);
+    if (this.menuPhase === 'lobby') {
+      if (!this.rebinding) {
+        for (const src of this.input.allSources()) {
+          const st = src.getState();
+          if (st.actionPressed && !this.joinedSources.has(src.id) && this.players.length < 4) {
+            this.joinedSources.add(src.id);
+            this.addPlayer(src);
+          }
         }
       }
+      this.ui.showMenu(
+        this.players.map((p) => ({
+          tag: this.sourceTag(p.source.id),
+          color: PLAYER_COLORS[p.id],
+          name: PLAYER_NAMES[p.id],
+        })),
+        this.players.length >= 1,
+      );
+      if (this.players.length >= 1 && this.restartRequested) {
+        this.restartRequested = false;
+        this.beginMatch();
+      }
     }
-    this.ui.showMenu(
-      this.players.map((p) => ({
-        label: p.source.label,
-        color: PLAYER_COLORS[p.id],
-        name: PLAYER_NAMES[p.id],
-      })),
-      this.players.length >= 1,
-    );
-    if (this.players.length >= 1 && this.restartRequested) {
-      this.restartRequested = false;
-      this.beginMatch();
-    }
+    this.restartRequested = false;
     this.stepPhysics(1 / 60);
   }
 
