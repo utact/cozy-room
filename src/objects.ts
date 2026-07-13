@@ -24,6 +24,10 @@ export class Prop {
   aura: THREE.Mesh | null = null;
   /** 라운드 한정 프롭 (일치 라운드 복제본, 뜯긴 팔) — scatter 시 수거 */
   temporary = false;
+  /** 추상화 모드 — 회색 프리미티브 스탠드인 (표시 중이면 mesh는 숨김) */
+  abstract: THREE.Object3D | null = null;
+  /** 스카우터 장비로 보이는 이름표 (있으면 update가 위치를 따라간다) */
+  label: THREE.Sprite | null = null;
 
   constructor(
     public meta: PropMeta,
@@ -162,6 +166,8 @@ export class PropManager {
     this.props = this.props.filter((p) => p !== prop);
     this.world.scene.remove(prop.mesh);
     if (prop.aura) this.world.scene.remove(prop.aura);
+    if (prop.abstract) this.world.scene.remove(prop.abstract);
+    if (prop.label) this.world.scene.remove(prop.label);
     this.world.physics.removeRigidBody(prop.body);
   }
 
@@ -207,6 +213,13 @@ export class PropManager {
       const r = prop.body.rotation();
       prop.mesh.position.set(t.x, t.y, t.z);
       prop.mesh.quaternion.set(r.x, r.y, r.z, r.w);
+      // 추상화 스탠드인도 같은 트랜스폼 추종
+      if (prop.abstract) {
+        prop.abstract.position.set(t.x, t.y, t.z);
+        prop.abstract.quaternion.set(r.x, r.y, r.z, r.w);
+      }
+      // 스카우터 이름표 — 프롭 위에 떠서 따라감
+      if (prop.label) prop.label.position.set(t.x, t.y + 0.55, t.z);
       // 팔 오라 — 바닥에 붙어 맥동
       if (prop.aura) {
         prop.aura.position.set(t.x, 0.05, t.z);

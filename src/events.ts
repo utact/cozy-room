@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { ROOM_W, ROOM_D, type World3D } from './world';
 import type { Player } from './player';
 import type { Prop, PropManager } from './objects';
-import { cloakObject, uncloakObject } from './visuals';
+import { cloakObject, uncloakObject, buildAbstractVisual } from './visuals';
 import { sfx } from './sound';
 
 export interface EventCtx {
@@ -199,9 +199,55 @@ class MysteryEvent implements RoundEvent {
   }
 }
 
+/**
+ * 사물들이 이상해졌다 — 모든 프롭이 회색 프리미티브(정육면체·구·원뿔 등)로 변한다.
+ * 미스터리(실루엣)보다 한 단계 더 추상적: 색·디테일이 전부 사라지고 대략의 형태만 남아,
+ * 직접 잡아봐야 정체를 안다. 잡으면 원래 모습으로 복원.
+ */
+class AbstractEvent implements RoundEvent {
+  id = 'abstract';
+  title = '사물들이 이상해졌다!';
+  desc = '전부 밋밋한 도형이 됐다. 잡아봐야 정체를 안다!';
+  private active: Prop[] = [];
+
+  start(ctx: EventCtx) {
+    for (const prop of ctx.props.props) {
+      if (prop.meta.armOwner !== undefined || prop.meta.equip) continue;
+      const stand = buildAbstractVisual(prop.meta);
+      ctx.world.scene.add(stand);
+      prop.abstract = stand;
+      prop.mesh.visible = false;
+      prop.cloaked = true; // 게스트 미러링/스카우터 차단용 플래그 재사용
+      this.active.push(prop);
+    }
+  }
+
+  tick(ctx: EventCtx) {
+    for (const prop of this.active) {
+      if (prop.cloaked && prop.heldBy.size > 0) this.reveal(ctx, prop);
+    }
+  }
+
+  private reveal(ctx: EventCtx, prop: Prop) {
+    if (prop.abstract) {
+      ctx.world.scene.remove(prop.abstract);
+      prop.abstract = null;
+    }
+    prop.mesh.visible = true;
+    prop.cloaked = false;
+    sfx.reveal(70);
+  }
+
+  end(ctx: EventCtx) {
+    for (const prop of this.active) this.reveal(ctx, prop);
+    this.active = [];
+  }
+}
+
 /** 라운드 1은 평화롭게(조작 학습), 이후 라운드는 랜덤 이벤트. ?event=id 로 강제 가능 */
 export function pickEvent(round: number, rng: () => number = Math.random): RoundEvent | null {
-  const pool: () => RoundEvent[] = () => [slippery, moon, new WindEvent(), new MysteryEvent()];
+  const pool: () => RoundEvent[] = () =>
+    [slippery, moon, new WindEvent(), new MysteryEvent(), new AbstractEvent()];
   const forced = new URLSearchParams(location.search).get('event');
   if (forced) return pool().find((e) => e.id === forced) ?? null;
   if (round <= 1) return null;

@@ -34,6 +34,8 @@ export interface PropMeta {
   armOwner?: number;
   /** 뜯긴 팔의 좌/우 */
   armSide?: 'L' | 'R';
+  /** 장비 아이템 — 점수용이 아니라 효과를 발동한다 (비행선이 투하) */
+  equip?: 'windbomb' | 'scouter' | 'laser';
 }
 
 const WOOD = 0x6b4a2f;
@@ -45,11 +47,13 @@ const CREAM = 0xf0ead6;
 export const LOOKALIKES: Record<string, string[]> = {
   'frying-pan': ['pingpong'],
   pingpong: ['frying-pan'],
-  'baseball-bat': ['baguette'],
-  baguette: ['baseball-bat'],
-  watermelon: ['bowling'],
-  'soccer-ball': ['bowling'],
-  bowling: ['watermelon', 'soccer-ball'],
+  'baseball-bat': ['baguette', 'pencil'],
+  baguette: ['baseball-bat', 'pencil'],
+  pencil: ['baseball-bat', 'baguette'],
+  watermelon: ['bowling', 'beachball'],
+  'soccer-ball': ['bowling', 'beachball'],
+  bowling: ['watermelon', 'soccer-ball', 'beachball'],
+  beachball: ['watermelon', 'soccer-ball', 'bowling'],
   trophy: ['plunger'],
   lamp: ['plunger'],
   plunger: ['trophy', 'lamp'],
@@ -391,6 +395,30 @@ export const PROP_CATALOG: PropMeta[] = [
     parts: [
       { shape: 'box', size: [0.15, 0.045, 0.35], pos: [0, 0, 0] },
       { shape: 'box', size: [0.16, 0.05, 0.12], pos: [0, 0.004, 0.02], color: CREAM },
+    ],
+  },
+
+  // ── 동형이의(트윈) 프롭 — 비주얼은 완전히 똑같은데 정체가 다르다. 심사 대참사 유발 ──
+  {
+    // 수박과 똑같이 생긴 비치볼 — 가볍고 장난감
+    id: 'beachball', name: '수박 비치볼', tags: ['장난감', '여름', '가벼움', '물놀이', '유머'],
+    shape: 'ball', size: [0.32, 0.32, 0.32], color: 0x2e7d3e, density: 0.14,
+    parts: [
+      { shape: 'ball', size: [0.32, 0.32, 0.32], pos: [0, 0, 0] },
+      { shape: 'cylinder', size: [0.02, 0.05, 0.02], pos: [0, 0.34, 0], rot: [0.3, 0, 0], color: 0x5f4a2e },
+      { shape: 'ball', size: [0.06, 0.06, 0.06], pos: [0, 0.18, 0.27], color: 0x1e5c2c },
+      { shape: 'ball', size: [0.06, 0.06, 0.06], pos: [0.24, 0, 0.2], color: 0x1e5c2c },
+      { shape: 'ball', size: [0.06, 0.06, 0.06], pos: [-0.24, 0, 0.2], color: 0x1e5c2c },
+    ],
+  },
+  {
+    // 야구방망이와 똑같이 생긴 초대형 연필 — 문구, 가볍다
+    id: 'pencil', name: '방망이 연필', tags: ['문구', '학교', '길쭉함', '유머', '가벼움'],
+    shape: 'cylinder', size: [0.08, 0.52, 0.08], color: 0xc98d4e, density: 0.2,
+    parts: [
+      { shape: 'cylinder', size: [0.075, 0.28, 0.075], pos: [0, 0.22, 0] },
+      { shape: 'cylinder', size: [0.045, 0.24, 0.045], pos: [0, -0.26, 0], color: 0xb07a3e },
+      { shape: 'ball', size: [0.06, 0.06, 0.06], pos: [0, -0.5, 0], color: 0x8c5e2e },
     ],
   },
 ];
