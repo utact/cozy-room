@@ -105,6 +105,16 @@ export class PropManager {
     return prop;
   }
 
+  /** 지정 위치에 라운드 한정 프롭 스폰 (비행선 장비 투하용) */
+  spawnDrop(meta: PropMeta, pos: THREE.Vector3): Prop {
+    const prop = this.spawn(meta);
+    prop.temporary = true;
+    prop.body.setTranslation({ x: pos.x, y: pos.y, z: pos.z }, true);
+    prop.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+    prop.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+    return prop;
+  }
+
   countOf(id: string): number {
     return this.props.filter((p) => p.meta.id === id).length;
   }

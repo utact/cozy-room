@@ -10,6 +10,7 @@ import { createJudge, winnerComment, josa, matchPunchline, matchComment, type Ju
 import { pickTopics, type Topic } from './topics';
 import { PROP_CATALOG, LOOKALIKES, type PropMeta } from './catalog';
 import { pickEvent, type EventCtx, type RoundEvent } from './events';
+import { EquipmentSystem } from './equipment';
 import { sfx } from './sound';
 import { BotSource } from './bot';
 import { NetChannel, resolveRelayUrl, round2, round3, type Snapshot } from './net';
@@ -47,6 +48,7 @@ export class Game {
   private round = 0;
   private topics: Topic[] = [];
   private event: RoundEvent | null = null;
+  private equip!: EquipmentSystem;
   private lastBeepSec = -1;
   /** 라운드별 타입 — 'match' = 일치 라운드 (모두 같은 물건, 하나 모자람) */
   private roundTypes: ('normal' | 'match')[] = [];
@@ -65,6 +67,8 @@ export class Game {
       for (const id of [...prop.heldBy]) this.players[id]?.release();
     };
     this.ui = new UI(container);
+    this.equip = new EquipmentSystem(this.world, this.props);
+    this.equip.onPulse = (t) => this.ui.pulseEvent(t);
     this.refreshControlsHint();
     this.showModeMenu();
     window.addEventListener('keydown', (e) => {
@@ -424,6 +428,7 @@ export class Game {
     if (this.stateTime >= TOPIC_TIME) {
       this.setState('scramble');
       this.ui.minifyTopic();
+      this.equip.start();
       if (this.event) {
         this.event.start(this.eventCtx);
         this.ui.showEvent(this.event.title, this.event.desc);
@@ -434,6 +439,7 @@ export class Game {
   private tickScramble(dt: number) {
     this.tickGameplay(dt);
     this.event?.tick?.(this.eventCtx, dt);
+    this.equip.tick(dt, this.players);
     const remain = SCRAMBLE_TIME - this.stateTime;
     this.ui.setTimer(Math.max(0, remain));
     // 마지막 5초 카운트다운 비프
@@ -557,6 +563,7 @@ export class Game {
       this.event.end(this.eventCtx);
       this.event = null;
     }
+    this.equip.end();
     this.ui.hideEvent();
     this.ui.setTimer(null);
     this.ui.hideTopic();
