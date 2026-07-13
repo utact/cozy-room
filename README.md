@@ -55,6 +55,17 @@ cd server && npm install && npm start   # ws://localhost:8787
 [docs/5-온라인모드-설계.md](docs/5-온라인모드-설계.md) 참고.
 결과 화면에서 `R` 을 누르면 온라인 방을 유지한 채 같은 멤버로 재경기합니다.
 
+## AI 연동 (LLM 심사 · 생성형 3D)
+
+- **LLM 심사위원**: 릴레이 서버에 `NVIDIA_API_KEY` 가 설정돼 있으면(`server/.env`,
+  gitignore됨) 매 라운드 심사가 NVIDIA NIM(라마 8B)으로 실행됩니다.
+  라운드당 1회 호출·토큰 캡으로 비용을 최소화하며, 실패 시 로컬 심사로 자동 폴백.
+- **Meshy 캐릭터 파이프라인**: `.mcp.json` 에 Meshy MCP 서버가 등록되어 있고
+  (`MESHY_API_KEY` 환경변수 필요), `tools/meshy-characters.mjs` 로 젤리빈 4색
+  캐릭터 GLB를 생성할 수 있습니다. 원격 개발 환경에서 실행하려면 네트워크
+  허용 목록에 `api.meshy.ai`, `assets.meshy.ai`, `integrate.api.nvidia.com`,
+  `*.cloudfront.net` 추가가 필요합니다.
+
 ## 개발
 
 ```bash
