@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 import { PROP_CATALOG, type PropMeta } from './catalog';
 import { ROOM_W, ROOM_D, type World3D } from './world';
-import { buildProceduralVisual, buildArmVisual, buildAuraRing } from './visuals';
+import { buildProceduralVisual } from './visuals';
 import type { AssetLibrary } from './assets';
 
 const THROWN_WINDOW = 1.6; // 이 시간 안에 상대를 맞히면 '뺏기' 성립 (초)
@@ -20,8 +20,6 @@ export class Prop {
   thrownTimer = 0;
   /** 현재 이 프롭을 잡고 있는 플레이어 id 집합 (동시 그랩 = 줄다리기) */
   heldBy = new Set<number>();
-  /** 뜯긴 팔 전용 — 바닥에서 눈에 띄게 하는 오라 링 */
-  aura: THREE.Mesh | null = null;
   /** 추상화 모드 — 회색 프리미티브 스탠드인 (표시 중이면 mesh는 숨김) */
   abstract: THREE.Object3D | null = null;
 
@@ -95,63 +93,17 @@ export class PropManager {
     prop.body.setAngvel({ x: rng() * 2, y: rng() * 4, z: rng() * 2 }, true);
   }
 
-  /** 줄다리기에서 뜯긴 팔을 아이템으로 스폰 */
-  spawnArm(playerId: number, playerName: string, color: number, pos: THREE.Vector3, side: 'L' | 'R'): Prop {
-    const meta: PropMeta = {
-      id: `arm-${playerId}-${side}`,
-      name: `${playerName}의 ${side === 'L' ? '왼팔' : '오른팔'}`,
-      tags: ['팔', '유머', '섬뜩함', '물귀신'],
-      shape: 'box',
-      size: [0.18, 0.42, 0.18],
-      color,
-      density: 0.5,
-      armOwner: playerId,
-      armSide: side,
-    };
-    const body = this.world.physics.createRigidBody(
-      RAPIER.RigidBodyDesc.dynamic()
-        .setTranslation(pos.x, pos.y + 0.4, pos.z)
-        .setLinearDamping(0.25)
-        .setAngularDamping(0.4),
-    );
-    const collider = this.world.physics.createCollider(
-      RAPIER.ColliderDesc.capsule(0.12, 0.085)
-        .setDensity(200)
-        .setFriction(0.75)
-        .setRestitution(0.35)
-        .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS),
-      body,
-    );
-    // 팔 비주얼 + 오라 링 (바닥에서 맥동하며 주인 색으로 빛난다)
-    const group = buildArmVisual(color);
-    this.world.scene.add(group);
-    const aura = buildAuraRing(color);
-    this.world.scene.add(aura);
-    // 뜯기는 임펄스 — 위로 팝
-    body.setLinvel({ x: (Math.random() - 0.5) * 3, y: 4.2, z: (Math.random() - 0.5) * 3 }, true);
-    body.setAngvel({ x: 6, y: 2, z: 6 }, true);
-    const prop = new Prop(meta, body, collider, group);
-    prop.aura = aura;
-    this.props.push(prop);
-    this.byCollider.set(collider.handle, prop);
-    return prop;
-  }
-
   despawn(prop: Prop) {
     this.beforeDespawn(prop);
     this.byCollider.delete(prop.collider.handle);
     this.props = this.props.filter((p) => p !== prop);
     this.world.scene.remove(prop.mesh);
-    if (prop.aura) this.world.scene.remove(prop.aura);
     if (prop.abstract) this.world.scene.remove(prop.abstract);
     this.world.physics.removeRigidBody(prop.body);
   }
 
-  /** 라운드 시작 — 프롭 위치를 방 안에 다시 흩뿌림. 뜯긴 팔은 수거된다. */
+  /** 라운드 시작 — 프롭 위치를 방 안에 다시 흩뿌림 */
   scatter(rng: () => number = Math.random) {
-    for (const arm of this.props.filter((p) => p.meta.armOwner !== undefined)) {
-      this.despawn(arm);
-    }
     for (const prop of this.props) {
       prop.thrownBy = -1;
       prop.thrownTimer = 0;
@@ -193,12 +145,6 @@ export class PropManager {
       if (prop.abstract) {
         prop.abstract.position.set(t.x, t.y, t.z);
         prop.abstract.quaternion.set(r.x, r.y, r.z, r.w);
-      }
-      // 팔 오라 — 바닥에 붙어 맥동
-      if (prop.aura) {
-        prop.aura.position.set(t.x, 0.05, t.z);
-        const s = 1 + 0.18 * Math.sin(this.time * 5.5);
-        prop.aura.scale.set(s, s, 1);
       }
     }
   }

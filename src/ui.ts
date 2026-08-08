@@ -136,7 +136,6 @@ const CSS = `
 .chip .pname { font-size: 12.5px; font-weight: 800; letter-spacing: .3px; }
 .chip .item { font-size: 12.5px; font-weight: 600; }
 .chip .item.empty { opacity: .38; font-weight: 400; }
-.chip .item.warn { color: #ff8a7a; font-weight: 800; animation: pulse 1s infinite; }
 .chip .pts { font-size: 17px; font-weight: 900; font-variant-numeric: tabular-nums; }
 .chip .pts small { font-size: 11px; opacity: .6; font-weight: 700; }
 .avatar.mini { width: 27px; height: 34px; border-radius: 14px; }
@@ -233,7 +232,6 @@ export interface HudEntry {
   color: number;
   heldName: string | null;
   score: number;
-  armless: boolean;
 }
 
 const CONFETTI_COLORS = ['#e4573d', '#3d7de4', '#e4b53d', '#4fbf5e', '#ffb86b', '#d9788f', '#8ad0ff'];
@@ -470,9 +468,7 @@ export class UI {
         `<div class="info"><span class="pname" style="color:${colorHex(e.color)}">${e.name}</span>` +
         (e.heldName
           ? `<span class="item">${e.heldName}</span>`
-          : e.armless
-            ? `<span class="item warn">팔이 없다! 팔을 찾아라!</span>`
-            : `<span class="item empty">빈손</span>`) +
+          : `<span class="item empty">빈손</span>`) +
         `</div><span class="pts">${e.score}<small>점</small></span>`;
       this.hudEl.appendChild(chip);
     }

@@ -29,8 +29,6 @@ export class Player {
   frozen = false;
   /** 바닥 왁스칠 이벤트 — 조향이 잘 안 듣는다 */
   slippery = false;
-  /** 뜯긴 팔 (좌/우) — 팔이 하나라도 없으면 자기 팔 외엔 잡을 수 없다 */
-  private missingArms = new Set<'L' | 'R'>();
   /** 직전 프레임 이동 입력 크기 — 줄다리기 힘 계산용 */
   lastMoveMag = 0;
   private jumpBuffer = 0;
@@ -40,16 +38,6 @@ export class Player {
   /** 잡기 가능한 프롭 아래 표시되는 링 */
   private indicator: THREE.Mesh;
   private arms: { L: THREE.Mesh; R: THREE.Mesh };
-  private stubs: { L: THREE.Mesh; R: THREE.Mesh };
-
-  get armless(): boolean {
-    return this.missingArms.size > 0;
-  }
-
-  /** 뜯긴 팔 상태를 'L'/'R'/'LR' 문자열로 (네트워크 동기화용) */
-  get missingArmSides(): string {
-    return (this.missingArms.has('L') ? 'L' : '') + (this.missingArms.has('R') ? 'R' : '');
-  }
 
   constructor(
     public id: number,
@@ -76,7 +64,6 @@ export class Player {
     const visual = createPlayerVisual(PLAYER_COLORS[this.id]);
     this.group = visual.group;
     this.arms = visual.arms;
-    this.stubs = visual.stubs;
     world.scene.add(this.group);
 
     this.indicator = new THREE.Mesh(
@@ -195,25 +182,14 @@ export class Player {
     return hit !== null;
   }
 
-  /** 지금 잡을 수 있는 대상 — 팔이 뜯긴 상태면 자기 팔만 잡을 수 있다 */
+  /** 지금 잡을 수 있는 대상 */
   private findCandidate(): Prop | null {
-    const prop = this.propMgr.findGrabbable(this.handWorld, this.id);
-    if (!prop) return null;
-    if (this.armless && prop.meta.armOwner !== this.id) return null;
-    return prop;
+    return this.propMgr.findGrabbable(this.handWorld, this.id);
   }
 
   private tryGrab() {
     const prop = this.findCandidate();
     if (!prop) return;
-    // 내 팔을 되찾으면 재장착 (아이템으로 들지 않는다)
-    if (prop.meta.armOwner === this.id) {
-      const side = prop.meta.armSide ?? 'R';
-      this.propMgr.despawn(prop);
-      this.restoreArm(side);
-      sfx.grab();
-      return;
-    }
     sfx.grab();
     const params = RAPIER.JointData.spherical(
       { x: HAND_LOCAL.x, y: HAND_LOCAL.y, z: HAND_LOCAL.z },
@@ -257,29 +233,8 @@ export class Player {
     this.body.applyImpulse({ x: kb.x, y: 350, z: kb.z }, true);
   }
 
-  /**
-   * 줄다리기 패배 — 팔이 뜯겨 나간다 (오른팔 먼저).
-   * 뜯긴 쪽과 위치를 반환. 이미 양팔이 없으면 null.
-   */
-  ripArm(): { side: 'L' | 'R'; pos: THREE.Vector3 } | null {
-    const side: 'L' | 'R' | null = !this.missingArms.has('R') ? 'R' : !this.missingArms.has('L') ? 'L' : null;
-    if (!side) return null;
-    this.missingArms.add(side);
-    this.arms[side].visible = false;
-    this.stubs[side].visible = true;
-    return { side, pos: this.position };
-  }
-
-  restoreArm(side: 'L' | 'R') {
-    this.missingArms.delete(side);
-    this.arms[side].visible = true;
-    this.stubs[side].visible = false;
-  }
-
   resetForRound(spawn: THREE.Vector3) {
     this.release();
-    this.restoreArm('L');
-    this.restoreArm('R');
     this.body.setTranslation({ x: spawn.x, y: spawn.y, z: spawn.z }, true);
     this.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
     this.body.setAngvel({ x: 0, y: 0, z: 0 }, true);

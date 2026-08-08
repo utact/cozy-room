@@ -59,7 +59,7 @@ export class Game {
   constructor(container: HTMLElement, assets: AssetLibrary) {
     this.world = new World3D(container);
     this.props = new PropManager(this.world, assets);
-    // 프롭 제거 시 잡고 있던 조인트부터 해제 (팔 재장착·수거 안전장치)
+    // 프롭 제거 시 잡고 있던 조인트부터 해제
     this.props.beforeDespawn = (prop) => {
       for (const id of [...prop.heldBy]) this.players[id]?.release();
     };
@@ -333,22 +333,10 @@ export class Game {
       const winner = holders[rolls.indexOf(Math.max(...rolls))];
       for (const id of holders) {
         if (id === winner) continue;
-        const loser = this.players[id];
-        loser.release();
-        // 패배의 대가 — 팔이 뜯겨 아이템이 된다. 되찾기 전까진 아무것도 못 줍는다.
-        const rip = loser.ripArm();
-        if (!rip) continue;
-        this.props.spawnArm(id, PLAYER_NAMES[id], PLAYER_COLORS[id], rip.pos, rip.side);
-        sfx.rip();
-        // 25% 확률 대참사 — 양팔이 다 뜯긴다
-        const rip2 = Math.random() < 0.25 ? loser.ripArm() : null;
-        if (rip2) {
-          this.props.spawnArm(id, PLAYER_NAMES[id], PLAYER_COLORS[id], rip2.pos, rip2.side);
-          sfx.rip();
-          this.ui.pulseEvent(`${PLAYER_NAMES[id]} 양팔 대참사!!`);
-        } else {
-          this.ui.pulseEvent(`${PLAYER_NAMES[id]}의 팔이 뜯어졌다!`);
-        }
+        // 패배의 대가 — 손에서 놓친다
+        this.players[id].release();
+        sfx.bonk();
+        this.ui.pulseEvent(`${PLAYER_NAMES[id]} 뺏겼다!`);
       }
       this.tugs.delete(prop);
     }
@@ -401,7 +389,6 @@ export class Game {
       color: PLAYER_COLORS[p.id],
       heldName: p.held?.meta.name ?? null,
       score: p.score,
-      armless: p.armless,
     }));
   }
 

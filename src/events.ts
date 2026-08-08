@@ -169,7 +169,6 @@ class MysteryEvent implements RoundEvent {
 
   start(ctx: EventCtx) {
     for (const prop of ctx.props.props) {
-      if (prop.meta.armOwner !== undefined) continue; // 팔은 누구 것인지 보여야 한다
       cloakObject(prop.mesh, this.saved);
       prop.cloaked = true;
       this.active.push(prop);
@@ -212,7 +211,6 @@ class AbstractEvent implements RoundEvent {
 
   start(ctx: EventCtx) {
     for (const prop of ctx.props.props) {
-      if (prop.meta.armOwner !== undefined) continue;
       const stand = buildAbstractVisual(prop.meta);
       ctx.world.scene.add(stand);
       prop.abstract = stand;

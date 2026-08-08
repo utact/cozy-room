@@ -30,10 +30,6 @@ export interface PropMeta {
   /** 밀도 — 무거울수록 던지기 느리고 맞으면 아픔 */
   density: number;
   parts?: PropPart[];
-  /** 줄다리기에서 뜯긴 팔 프롭 — 주인 플레이어 id (잡으면 재장착) */
-  armOwner?: number;
-  /** 뜯긴 팔의 좌/우 */
-  armSide?: 'L' | 'R';
 }
 
 const WOOD = 0x6b4a2f;

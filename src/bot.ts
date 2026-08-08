@@ -3,7 +3,7 @@
  * InputSource 인터페이스를 구현해 사람 플레이어와 완전히 동일한 경로로 게임에 참가한다.
  * (심사자가 혼자 평가할 때도 난투가 성립하도록 하는 것이 주 목적)
  *
- * 행동: 팔 없으면 자기 팔 회수 → 빈손이면 근처 프롭 물색·그랩(테이블 위면 점프)
+ * 행동: 빈손이면 근처 프롭 물색·그랩(테이블 위면 점프)
  *      → 들고 있으면 잠시 어슬렁대다 가장 가까운 상대에게 접근해 던지기.
  */
 
@@ -54,14 +54,7 @@ export class BotSource implements InputSource {
     let action = false;
     let jump = false;
 
-    if (this.self.armless) {
-      // 최우선: 내 팔 회수
-      const arm = this.props.props.find((p) => p.meta.armOwner === this.self!.id);
-      if (arm) {
-        dest = arm.position;
-        if (dest.distanceTo(me) < 1.0) action = true;
-      }
-    } else if (this.self.held) {
+    if (this.self.held) {
       // 들고 있음 — 인내심이 다하면 가장 가까운 상대에게 투척
       this.holdTimer += DT;
       const foe = this.nearestFoe(me);
@@ -133,7 +126,7 @@ export class BotSource implements InputSource {
   /** 가까운 프롭 5개 중 랜덤 — 매번 같은 것만 노리지 않게 */
   private pickProp(me: THREE.Vector3): Prop | null {
     const candidates = this.props!.props
-      .filter((p) => !p.heldBy.has(this.self!.id) && p.meta.armOwner === undefined)
+      .filter((p) => !p.heldBy.has(this.self!.id))
       .map((p) => ({ p, d: p.position.distanceTo(me) }))
       .sort((a, b) => a.d - b.d)
       .slice(0, 5);

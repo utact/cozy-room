@@ -92,10 +92,6 @@ class Sfx {
     notes.forEach((f, i) => this.tone('triangle', f, f, 0.32, 0.25, i * 0.14));
     this.noise(0.6, 0.12, 3000, 0.5);
   }
-  rip() {
-    this.noise(0.28, 0.4, 1600);
-    this.tone('sawtooth', 300, 90, 0.35, 0.28, 0.04);
-  }
   /** 클로즈업 긴장감 — 점점 빨라지는 드럼롤 (~1.7초) */
   drumroll() {
     let when = 0;
