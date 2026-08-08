@@ -30,12 +30,6 @@ export interface PropMeta {
   /** 밀도 — 무거울수록 던지기 느리고 맞으면 아픔 */
   density: number;
   parts?: PropPart[];
-  /** 줄다리기에서 뜯긴 팔 프롭 — 주인 플레이어 id (잡으면 재장착) */
-  armOwner?: number;
-  /** 뜯긴 팔의 좌/우 */
-  armSide?: 'L' | 'R';
-  /** 장비 아이템 — 점수용이 아니라 효과를 발동한다 (비행선이 투하) */
-  equip?: 'windbomb' | 'scouter' | 'laser';
 }
 
 const WOOD = 0x6b4a2f;
@@ -43,7 +37,7 @@ const DARK = 0x2f2f38;
 const METAL = 0xcfd2d8;
 const CREAM = 0xf0ead6;
 
-/** 닮은꼴 관계 — 일치 라운드의 낚시 판정과 미끼 스폰에 쓰인다 */
+/** 닮은꼴 관계 — 일치 라운드 목표 선정과 낚임 판정에 쓰인다 */
 export const LOOKALIKES: Record<string, string[]> = {
   'frying-pan': ['pingpong'],
   pingpong: ['frying-pan'],

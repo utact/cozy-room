@@ -1,8 +1,7 @@
 /**
- * 입력 — 로컬 동일화면 2~4인.
- * 게임패드 우선(연결된 패드 = 플레이어 후보), 키보드 2세트 폴백.
- * 키보드 배치는 메뉴에서 리바인딩 가능하며 localStorage에 저장된다.
- * 온라인 확장 대비: 게임 로직은 InputSource 인터페이스(getState)만 본다.
+ * 입력 — 한 대의 노트북을 둘이 나눠 쓴다. 키보드 2세트(좌: WASD / 우: 방향키).
+ * 배치는 메뉴에서 리바인딩 가능하며 localStorage에 저장된다.
+ * 게임 로직은 InputSource 인터페이스(getState)만 보므로 AI 봇도 같은 자리에 낀다.
  */
 
 export interface InputState {
@@ -34,6 +33,8 @@ const DEFAULT_SCHEMES: KeyScheme[] = [
   { up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight', action: 'Enter', jump: 'ShiftRight' },
 ];
 
+const SCHEME_KEYS: (keyof KeyScheme)[] = ['up', 'down', 'left', 'right', 'action', 'jump'];
+
 const STORAGE_KEY = 'cozy-room-keys';
 
 export function keyName(code: string): string {
@@ -51,14 +52,14 @@ export function keyName(code: string): string {
 function loadSchemes(): KeyScheme[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return DEFAULT_SCHEMES.map((s) => ({ ...s }));
-    const parsed = JSON.parse(raw) as KeyScheme[];
-    const keys: (keyof KeyScheme)[] = ['up', 'down', 'left', 'right', 'action', 'jump'];
-    if (
-      Array.isArray(parsed) && parsed.length === 2 &&
-      parsed.every((s) => keys.every((k) => typeof s[k] === 'string'))
-    ) {
-      return parsed;
+    if (raw) {
+      const parsed = JSON.parse(raw) as KeyScheme[];
+      if (
+        Array.isArray(parsed) && parsed.length === DEFAULT_SCHEMES.length &&
+        parsed.every((s) => SCHEME_KEYS.every((k) => typeof s[k] === 'string'))
+      ) {
+        return parsed;
+      }
     }
   } catch { /* 무시하고 기본값 */ }
   return DEFAULT_SCHEMES.map((s) => ({ ...s }));
@@ -93,42 +94,6 @@ class KeyboardSource implements InputSource {
   }
 }
 
-// ── 게임패드 ────────────────────────────────────────────
-
-const AXIS_DEADZONE = 0.22;
-
-class GamepadSource implements InputSource {
-  readonly id: string;
-  readonly label: string;
-  private prevAction = false;
-  private prevJump = false;
-
-  constructor(private index: number) {
-    this.id = `pad${index}`;
-    this.label = `게임패드 ${index + 1}<br/>잡기 A · 점프 B`;
-  }
-
-  getState(): InputState {
-    const pad = navigator.getGamepads()[this.index];
-    if (!pad) return { moveX: 0, moveZ: 0, actionPressed: false, actionHeld: false, jumpPressed: false };
-    const dz = (v: number) => (Math.abs(v) < AXIS_DEADZONE ? 0 : v);
-    let moveX = dz(pad.axes[0] ?? 0);
-    let moveZ = dz(pad.axes[1] ?? 0);
-    // 디지털 패드 폴백
-    if (pad.buttons[14]?.pressed) moveX = -1;
-    if (pad.buttons[15]?.pressed) moveX = 1;
-    if (pad.buttons[12]?.pressed) moveZ = -1;
-    if (pad.buttons[13]?.pressed) moveZ = 1;
-    const held = !!(pad.buttons[0]?.pressed || pad.buttons[2]?.pressed);
-    const actionPressed = held && !this.prevAction;
-    this.prevAction = held;
-    const jumpHeld = !!pad.buttons[1]?.pressed;
-    const jumpPressed = jumpHeld && !this.prevJump;
-    this.prevJump = jumpHeld;
-    return { moveX, moveZ, actionPressed, actionHeld: held, jumpPressed };
-  }
-}
-
 // ── 매니저 ──────────────────────────────────────────────
 
 const REBIND_STEPS: [keyof KeyScheme, string][] = [
@@ -142,13 +107,14 @@ const REBIND_STEPS: [keyof KeyScheme, string][] = [
 
 export class InputManager {
   private keys = new Set<string>();
-  private sources = new Map<string, InputSource>();
+  private sources: InputSource[] = [];
   readonly schemes: KeyScheme[];
 
   constructor() {
     this.schemes = loadSchemes();
     window.addEventListener('keydown', (e) => {
       this.keys.add(e.code);
+      // 스크롤·폼 기본 동작 차단 (2P가 방향키·Enter를 쓴다)
       if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter'].includes(e.code)) {
         e.preventDefault();
       }
@@ -156,28 +122,15 @@ export class InputManager {
     window.addEventListener('keyup', (e) => this.keys.delete(e.code));
     window.addEventListener('blur', () => this.keys.clear());
 
-    this.schemes.forEach((scheme, i) => {
-      const src = new KeyboardSource(scheme, this.keys, i);
-      this.sources.set(src.id, src);
-    });
-    window.addEventListener('gamepadconnected', (e) => {
-      const src = new GamepadSource(e.gamepad.index);
-      this.sources.set(src.id, src);
-    });
-    for (const pad of navigator.getGamepads()) {
-      if (pad) {
-        const src = new GamepadSource(pad.index);
-        this.sources.set(src.id, src);
-      }
-    }
+    this.sources = this.schemes.map((scheme, i) => new KeyboardSource(scheme, this.keys, i));
   }
 
   allSources(): InputSource[] {
-    return [...this.sources.values()];
+    return this.sources;
   }
 
   /**
-   * 키보드 스킴 리바인딩 — 안내 문구를 prompt로 내보내고 키 입력을 순서대로 받는다.
+   * 키 배치 리바인딩 — 안내 문구를 prompt로 내보내고 키 입력을 순서대로 받는다.
    * Escape로 중단(이미 입력한 키까지만 반영). 완료 시 localStorage에 저장.
    */
   async rebindScheme(index: number, prompt: (msg: string) => void): Promise<void> {

@@ -1,9 +1,9 @@
 /**
  * AI 심사위원 — 주제 대비 제출물 채점 + 한 줄 평.
  *
- * Judge 인터페이스만 맞추면 구현체 교체 가능:
- *  - LocalJudge : 태그 매칭 + 템플릿 문장 풀. 오프라인에서 항상 작동 (기본값).
- *  - RemoteJudge: 실제 Claude 엔드포인트 프록시 호출. 실패 시 LocalJudge로 폴백.
+ * 프롭에 부여된 태그와 주제별 태그 가중치를 매칭해 점수를 내고, 점수 구간별
+ * 템플릿 문장 풀에서 한 줄 평을 뽑는다. 외부 API 호출이 없어 정적 웹 빌드에서
+ * 키 없이 항상 동작한다.
  */
 
 import type { PropMeta } from './catalog';
@@ -28,10 +28,6 @@ export interface JudgeVerdict {
 
 export interface JudgeResult {
   verdicts: JudgeVerdict[];
-}
-
-export interface Judge {
-  judge(payload: JudgePayload): Promise<JudgeResult>;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -77,7 +73,6 @@ const TAG_QUIPS: Record<string, string> = {
   비쌈: '지갑 사정이 느껴지고',
   유머: '웃음은 보장되고',
   한국인: 'K-감성이 넘치고',
-  팔: '사람 팔이 왜 여기서 나오나 싶지만',
 };
 
 const WINNER_TEMPLATES = [
@@ -177,7 +172,7 @@ function fill(template: string, name: string, item: string): string {
   return template.replaceAll('{name}', name).replaceAll('{item}', item);
 }
 
-export class LocalJudge implements Judge {
+export class LocalJudge {
   constructor(private rng: () => number = Math.random) {}
 
   async judge(payload: JudgePayload): Promise<JudgeResult> {
@@ -224,55 +219,4 @@ export class LocalJudge implements Judge {
 
 export function winnerComment(name: string, rng: () => number = Math.random): string {
   return fill(pick(WINNER_TEMPLATES, rng), name, '');
-}
-
-// ─────────────────────────────────────────────────────────────
-// RemoteJudge — 실AI 연결부 (프록시 엔드포인트 준비 시 활성화)
-
-export class RemoteJudge implements Judge {
-  private fallback = new LocalJudge();
-
-  constructor(private endpoint: string) {}
-
-  async judge(payload: JudgePayload): Promise<JudgeResult> {
-    try {
-      const res = await fetch(this.endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          topic: payload.topic.text,
-          entries: payload.entries.map((e) => ({
-            playerId: e.playerId,
-            playerName: e.playerName,
-            item: e.item ? { name: e.item.name, tags: e.item.tags } : null,
-          })),
-        }),
-        signal: AbortSignal.timeout(6000),
-      });
-      if (!res.ok) throw new Error(`judge endpoint ${res.status}`);
-      const data = (await res.json()) as JudgeResult;
-      if (!Array.isArray(data.verdicts)) throw new Error('malformed judge response');
-      return data;
-    } catch (err) {
-      console.warn('[judge] 원격 심사 실패, 로컬 심사로 폴백:', err);
-      return this.fallback.judge(payload);
-    }
-  }
-}
-
-/**
- * 심사 엔드포인트 결정:
- * 1) ?judge=URL 명시 → 그 주소
- * 2) 릴레이 서버가 설정되어 있으면 릴레이의 /judge (NVIDIA LLM 프록시)
- * 3) 없으면 로컬 심사기
- * 원격은 실패 시 항상 로컬로 폴백하므로 안전하다.
- */
-export function createJudge(relayUrl: string | null): Judge {
-  const explicit = new URLSearchParams(location.search).get('judge');
-  if (explicit) return new RemoteJudge(explicit);
-  if (relayUrl) {
-    const httpBase = relayUrl.replace(/^ws/, 'http').replace(/\/$/, '');
-    return new RemoteJudge(`${httpBase}/judge`);
-  }
-  return new LocalJudge();
 }

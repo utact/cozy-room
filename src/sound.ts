@@ -73,6 +73,14 @@ class Sfx {
   tick() { this.tone('square', 880, 880, 0.06, 0.12); }
   buzzer() { this.tone('sawtooth', 240, 200, 0.55, 0.3); this.tone('sawtooth', 302, 250, 0.55, 0.2); }
   gust() { this.noise(0.5, 0.22, 1200); }
+  /** 폭탄 낙하 — 떨어지는 휘파람 */
+  whistle() { this.tone('sine', 1100, 320, 0.55, 0.14); }
+  /** 폭발 — 저역 붐 + 파열 노이즈 */
+  explode() {
+    this.noise(0.55, 0.45, 1600);
+    this.tone('sawtooth', 170, 40, 0.45, 0.28);
+    this.tone('sine', 90, 28, 0.7, 0.22, 0.02);
+  }
   reveal(score: number) {
     // 점수 높을수록 밝은 딩동
     const base = 420 + score * 4.4;
@@ -83,10 +91,6 @@ class Sfx {
     const notes = [523, 659, 784, 1047];
     notes.forEach((f, i) => this.tone('triangle', f, f, 0.32, 0.25, i * 0.14));
     this.noise(0.6, 0.12, 3000, 0.5);
-  }
-  rip() {
-    this.noise(0.28, 0.4, 1600);
-    this.tone('sawtooth', 300, 90, 0.35, 0.28, 0.04);
   }
   /** 클로즈업 긴장감 — 점점 빨라지는 드럼롤 (~1.7초) */
   drumroll() {

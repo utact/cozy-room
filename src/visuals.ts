@@ -1,4 +1,4 @@
-/** 공유 비주얼 빌더 — 호스트(물리 연동)와 온라인 게스트(미러링)가 같은 외형을 쓴다 */
+/** 공유 비주얼 빌더 — 플레이어와 프롭의 외형을 한곳에서 만든다 */
 
 import * as THREE from 'three';
 import type { PropMeta, PropShape } from './catalog';
@@ -9,10 +9,9 @@ export const CAPSULE_R = 0.34;
 export interface PlayerVisual {
   group: THREE.Group;
   arms: { L: THREE.Mesh; R: THREE.Mesh };
-  stubs: { L: THREE.Mesh; R: THREE.Mesh };
 }
 
-/** 캡슐 캐릭터 (눈·팔·뜯긴 자리 스텁 포함) */
+/** 캡슐 캐릭터 (눈·팔) */
 export function createPlayerVisual(color: number): PlayerVisual {
   const group = new THREE.Group();
   const bodyMat = new THREE.MeshStandardMaterial({ color, roughness: 0.6 });
@@ -37,9 +36,7 @@ export function createPlayerVisual(color: number): PlayerVisual {
     group.add(pupil);
   }
   const armMat = new THREE.MeshStandardMaterial({ color, roughness: 0.6 });
-  const stubMat = new THREE.MeshStandardMaterial({ color: 0x8e3423, roughness: 0.85 });
   const arms = {} as PlayerVisual['arms'];
-  const stubs = {} as PlayerVisual['stubs'];
   for (const [key, side] of [['L', -1], ['R', 1]] as const) {
     const arm = new THREE.Mesh(new THREE.CapsuleGeometry(0.085, 0.24, 4, 10), armMat);
     arm.castShadow = true;
@@ -47,13 +44,8 @@ export function createPlayerVisual(color: number): PlayerVisual {
     arm.rotation.z = side * 0.55;
     group.add(arm);
     arms[key] = arm;
-    const stub = new THREE.Mesh(new THREE.SphereGeometry(0.07, 10, 8), stubMat);
-    stub.position.set(side * (CAPSULE_R + 0.02), 0.2, 0.02);
-    stub.visible = false;
-    group.add(stub);
-    stubs[key] = stub;
   }
-  return { group, arms, stubs };
+  return { group, arms };
 }
 
 /** 팔 자세 블렌딩 — held 여부에 따라 앞으로 뻗기 */
@@ -98,32 +90,6 @@ export function buildProceduralVisual(meta: PropMeta): THREE.Object3D {
   return group;
 }
 
-/** 뜯긴 팔 비주얼 (캡슐 + 주먹) */
-export function buildArmVisual(color: number): THREE.Group {
-  const group = new THREE.Group();
-  const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.6 });
-  const limb = new THREE.Mesh(new THREE.CapsuleGeometry(0.085, 0.24, 4, 10), mat);
-  limb.castShadow = true;
-  group.add(limb);
-  const fist = new THREE.Mesh(new THREE.SphereGeometry(0.1, 10, 8), mat);
-  fist.position.y = 0.19;
-  fist.castShadow = true;
-  group.add(fist);
-  return group;
-}
-
-/** 팔 프롭 아래 맥동 오라 링 */
-export function buildAuraRing(color: number): THREE.Mesh {
-  const aura = new THREE.Mesh(
-    new THREE.RingGeometry(0.3, 0.46, 26),
-    new THREE.MeshBasicMaterial({
-      color, transparent: true, opacity: 0.6, side: THREE.DoubleSide, depthWrite: false,
-    }),
-  );
-  aura.rotation.x = -Math.PI / 2;
-  return aura;
-}
-
 /** 추상화 모드 — 프롭을 콜라이더 모양의 회색 프리미티브로 표현 (형태만 보고 추측) */
 const ABSTRACT_MAT = new THREE.MeshStandardMaterial({ color: 0x9a9aa6, roughness: 0.85, flatShading: true });
 
@@ -131,37 +97,6 @@ export function buildAbstractVisual(meta: PropMeta): THREE.Mesh {
   const mesh = new THREE.Mesh(buildGeometry(meta.shape, meta.size), ABSTRACT_MAT);
   mesh.castShadow = mesh.receiveShadow = true;
   return mesh;
-}
-
-/** 스카우터용 이름표 스프라이트 (캔버스 텍스처) */
-export function makeLabelSprite(text: string): THREE.Sprite {
-  const canvas = document.createElement('canvas');
-  canvas.width = 256;
-  canvas.height = 64;
-  const ctx = canvas.getContext('2d')!;
-  ctx.fillStyle = 'rgba(15,11,28,0.82)';
-  roundRect(ctx, 4, 8, 248, 48, 12);
-  ctx.fill();
-  ctx.font = 'bold 30px Pretendard, sans-serif';
-  ctx.fillStyle = '#8ad0ff';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(text, 128, 34);
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.anisotropy = 4;
-  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
-  sprite.scale.set(0.9, 0.225, 1);
-  return sprite;
-}
-
-function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.arcTo(x + w, y, x + w, y + h, r);
-  ctx.arcTo(x + w, y + h, x, y + h, r);
-  ctx.arcTo(x, y + h, x, y, r);
-  ctx.arcTo(x, y, x + w, y, r);
-  ctx.closePath();
 }
 
 /** 미스터리 룸 실루엣 재질 */
