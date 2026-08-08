@@ -36,6 +36,9 @@ const CSS = `
   background: linear-gradient(135deg, #e4573d, #b03a26); padding: 7px 16px;
   border-radius: 999px; font-weight: 800; font-size: 14px;
   box-shadow: 0 5px 16px rgba(0,0,0,.45); border: 2px solid rgba(255,255,255,.25); }
+/* 이미지 로고는 사방에 투명 여백(상 14%·우 12%)이 있어, 텍스트 로고 기준 오프셋을
+   그대로 쓰면 리본이 허공에 뜬다. 여백만큼 안으로 당겨 글자 모서리에 붙인다. */
+.logo.has-img .ribbon { top: 8.5%; right: 4.5%; }
 .subtitle { font-size: 17px; opacity: .9; font-weight: 600;
   text-shadow: 0 2px 8px rgba(0,0,0,.6); }
 
@@ -375,7 +378,9 @@ export class UI {
 
     // 생성형 아트 — 로드되면 텍스트 로고를 이미지로, 배경에 키 비주얼
     loadArt(ART.logo, (url) => {
-      if (url) logo.querySelector('.big')!.outerHTML = `<img class="logo-img" src="${url}" alt="잡아라! 코지 룸" />`;
+      if (!url) return;
+      logo.querySelector('.big')!.outerHTML = `<img class="logo-img" src="${url}" alt="잡아라! 코지 룸" />`;
+      logo.classList.add('has-img'); // 리본 위치를 이미지 여백에 맞춰 보정
     });
     loadArt(ART.keyart, (url) => {
       if (url) {
