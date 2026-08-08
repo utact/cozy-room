@@ -34,8 +34,6 @@ export interface PropMeta {
   armOwner?: number;
   /** 뜯긴 팔의 좌/우 */
   armSide?: 'L' | 'R';
-  /** 장비 아이템 — 점수용이 아니라 효과를 발동한다 (비행선이 투하) */
-  equip?: 'windbomb' | 'scouter' | 'laser';
 }
 
 const WOOD = 0x6b4a2f;

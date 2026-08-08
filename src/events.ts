@@ -212,12 +212,12 @@ class AbstractEvent implements RoundEvent {
 
   start(ctx: EventCtx) {
     for (const prop of ctx.props.props) {
-      if (prop.meta.armOwner !== undefined || prop.meta.equip) continue;
+      if (prop.meta.armOwner !== undefined) continue;
       const stand = buildAbstractVisual(prop.meta);
       ctx.world.scene.add(stand);
       prop.abstract = stand;
       prop.mesh.visible = false;
-      prop.cloaked = true; // 게스트 미러링/스카우터 차단용 플래그 재사용
+      prop.cloaked = true; // 게스트 미러링용 플래그 재사용
       this.active.push(prop);
     }
   }

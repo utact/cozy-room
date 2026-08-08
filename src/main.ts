@@ -31,8 +31,6 @@ async function boot() {
   // 개발·자동화 테스트용 디버그 핸들
   const w = window as unknown as Record<string, unknown>;
   w.__cozy = game;
-  const { EQUIP_CATALOG } = await import('./equipment');
-  w.__EQUIP = EQUIP_CATALOG;
 }
 
 boot().catch((err) => {

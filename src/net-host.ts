@@ -135,7 +135,7 @@ export function wrapUIForHost(ui: UI, session: HostSession): UI {
 
 const RELAYED_SFX = [
   'grab', 'throw', 'bonk', 'tick', 'buzzer', 'gust', 'reveal',
-  'fanfare', 'rip', 'drumroll', 'tada', 'jump',
+  'fanfare', 'rip', 'drumroll', 'tada', 'jump', 'whistle', 'explode',
 ] as const;
 
 /** 호스트에서 나는 효과음을 게스트에게도 중계 */
