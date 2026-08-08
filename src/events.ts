@@ -217,7 +217,7 @@ class AbstractEvent implements RoundEvent {
       ctx.world.scene.add(stand);
       prop.abstract = stand;
       prop.mesh.visible = false;
-      prop.cloaked = true; // 게스트 미러링용 플래그 재사용
+      prop.cloaked = true; // 실루엣 판정 플래그 재사용
       this.active.push(prop);
     }
   }

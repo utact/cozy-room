@@ -15,8 +15,8 @@ const MOVE_SPEED = 4.6;
 const YAW_GAIN = 11;
 const HAND_LOCAL = { x: 0, y: 0.15, z: 0.62 }; // 몸 기준 손 위치 (앞)
 
-export const PLAYER_COLORS = [0xe4573d, 0x3d7de4, 0xe4b53d, 0x4fbf5e];
-export const PLAYER_NAMES = ['1P', '2P', '3P', '4P'];
+export const PLAYER_COLORS = [0xe4573d, 0x3d7de4];
+export const PLAYER_NAMES = ['1P', '2P'];
 
 export class Player {
   body: RAPIER.RigidBody;

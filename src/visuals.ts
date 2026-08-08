@@ -1,4 +1,4 @@
-/** 공유 비주얼 빌더 — 호스트(물리 연동)와 온라인 게스트(미러링)가 같은 외형을 쓴다 */
+/** 공유 비주얼 빌더 — 플레이어·프롭·팔의 외형을 한곳에서 만든다 */
 
 import * as THREE from 'three';
 import type { PropMeta, PropShape } from './catalog';

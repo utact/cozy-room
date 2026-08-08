@@ -6,16 +6,13 @@ import { PropManager, type Prop } from './objects';
 import { Player, PLAYER_COLORS, PLAYER_NAMES } from './player';
 import { InputManager, keyName, type InputSource } from './input';
 import { UI, kbd } from './ui';
-import { createJudge, winnerComment, josa, matchPunchline, matchComment, type JudgeEntry } from './judge';
+import { LocalJudge, winnerComment, josa, matchPunchline, matchComment, type JudgeEntry } from './judge';
 import { pickTopics, type Topic } from './topics';
 import { PROP_CATALOG, LOOKALIKES, type PropMeta } from './catalog';
 import { pickEvent, type EventCtx, type RoundEvent } from './events';
 import { AirshipSystem } from './airship';
 import { sfx } from './sound';
 import { BotSource } from './bot';
-import { NetChannel, resolveRelayUrl, round2, round3, type Snapshot } from './net';
-import { HostSession, RemoteInputSource, wrapUIForHost, patchSfxForHost, patchCameraForHost } from './net-host';
-import { VoiceChat } from './voice';
 import type { AssetLibrary } from './assets';
 
 // ?fast — 개발·시연용 단축 라운드
@@ -25,11 +22,11 @@ const SCRAMBLE_TIME = FAST ? 6 : 25;
 const ROUNDS = 3;
 const FIXED_DT = 1 / 60;
 
+const MAX_PLAYERS = 2;
+
 const SPAWNS = [
   new THREE.Vector3(-5.5, 1.2, 3.5),
   new THREE.Vector3(5.5, 1.2, 3.5),
-  new THREE.Vector3(-5.5, 1.2, -3.5),
-  new THREE.Vector3(5.5, 1.2, -3.5),
 ];
 
 type State = 'menu' | 'topic' | 'scramble' | 'judging' | 'results';
@@ -39,7 +36,7 @@ export class Game {
   private props: PropManager;
   private input = new InputManager();
   private ui: UI;
-  private judge = createJudge(resolveRelayUrl());
+  private judge = new LocalJudge();
 
   private players: Player[] = [];
   private playersByCollider = new Map<number, Player>();
@@ -50,7 +47,7 @@ export class Game {
   private event: RoundEvent | null = null;
   private airship!: AirshipSystem;
   private lastBeepSec = -1;
-  /** 라운드별 타입 — 'match' = 일치 라운드 (모두 같은 물건, 하나 모자람) */
+  /** 라운드별 타입 — 'match' = 일치 라운드 (지목된 물건 하나를 둘이 다툰다) */
   private roundTypes: ('normal' | 'match')[] = [];
   private matchTarget: PropMeta | null = null;
   private accumulator = 0;
@@ -70,147 +67,20 @@ export class Game {
     this.airship = new AirshipSystem(this.world, this.props);
     this.airship.onPulse = (t) => this.ui.pulseEvent(t);
     this.refreshControlsHint();
-    this.showModeMenu();
+    this.ui.showLobbyScreen();
     window.addEventListener('keydown', (e) => {
       if (this.rebinding) return;
       if (e.code === 'KeyR') this.restartRequested = true;
-      if (e.code === 'KeyV') this.voice?.toggle();
       if (this.state !== 'menu') return;
-      if (this.menuPhase === 'mode') {
-        if (e.code === 'Digit1') this.enterLobby();
-        if (e.code === 'Digit2') this.hostAndEnterLobby();
-        if (e.code === 'Digit3') this.openJoinPrompt();
-        if (e.code === 'KeyK') {
-          this.enterLobby();
-          this.startRebind();
-        }
-      } else {
-        if (e.code === 'KeyK') this.startRebind();
-        if (e.code === 'KeyB') this.addBot();
-        if (e.code === 'Escape' && !this.hostSession) this.showModeMenu();
-      }
+      if (e.code === 'KeyK') this.startRebind();
+      if (e.code === 'KeyB') this.addBot();
     });
-  }
-
-  // ── 메뉴 흐름: 모드 선택 → 로비 ──────────────────────
-  private menuPhase: 'mode' | 'lobby' = 'mode';
-
-  private showModeMenu() {
-    this.menuPhase = 'mode';
-    this.ui.showModeSelect({
-      local: () => this.enterLobby(),
-      host: () => this.hostAndEnterLobby(),
-      join: () => this.openJoinPrompt(),
-    });
-  }
-
-  private enterLobby() {
-    this.menuPhase = 'lobby';
-    this.ui.showLobbyScreen(this.hostSession ? null : () => this.showModeMenu());
-  }
-
-  private async hostAndEnterLobby() {
-    await this.startHosting();
-    if (this.hostSession) this.enterLobby();
-  }
-
-  private openJoinPrompt() {
-    this.ui.promptJoinCode(
-      (code) => {
-        const relay = resolveRelayUrl();
-        if (!relay) return '릴레이 서버가 설정되지 않았습니다 (?relay=주소 필요)';
-        location.href = `${location.pathname}?join=${code}&relay=${encodeURIComponent(relay)}`;
-        return null;
-      },
-      () => {},
-    );
-  }
-
-  // ── 온라인 호스팅 ────────────────────────────────────
-  private hostSession: HostSession | null = null;
-  private voice: VoiceChat | null = null;
-
-  private async startHosting() {
-    if (this.hostSession) return;
-    const relayUrl = resolveRelayUrl();
-    if (!relayUrl) {
-      this.ui.setOnlineStatus(
-        '<b>온라인 불가</b><br/>릴레이 서버가 설정되지 않았습니다.<br/>URL에 <b>?relay=wss://…</b> 를 붙이거나 docs/5-온라인모드-설계.md 참고',
-      );
-      return;
-    }
-    try {
-      this.ui.setOnlineStatus('릴레이 서버 접속 중…');
-      const channel = await NetChannel.connect(relayUrl);
-      const code = await channel.createRoom();
-      this.hostSession = new HostSession(channel, {
-        addRemotePlayer: (src) => this.addRemotePlayer(src),
-        buildSnapshot: () => this.buildSnapshot(),
-        themeId: this.world.theme.id,
-        onGuestLeft: () => this.ui.pulseEvent('게스트 연결 끊김'),
-      });
-      this.ui = wrapUIForHost(this.ui, this.hostSession);
-      patchSfxForHost(this.hostSession);
-      patchCameraForHost(this.world, this.hostSession);
-      this.voice = new VoiceChat(channel, 0);
-      this.voice.onStateChange = (s, n) => this.ui.setVoiceState(s, n);
-      this.ui.initVoiceChip(() => this.voice?.toggle());
-      const joinUrl = `${location.origin}${location.pathname}?join=${code}&relay=${encodeURIComponent(relayUrl)}`;
-      this.ui.setOnlineStatus(
-        `<b>온라인 방</b> <span class="code">${code}</span><br/>참가 주소: ${joinUrl}`,
-      );
-      channel.onClose(() => {
-        this.ui.setOnlineStatus('<b>릴레이 연결 끊김</b> — 온라인 비활성화');
-        this.hostSession?.dispose();
-        this.hostSession = null;
-      });
-    } catch (err) {
-      this.ui.setOnlineStatus(`<b>온라인 실패</b><br/>${err instanceof Error ? err.message : err}`);
-    }
-  }
-
-  private addRemotePlayer(source: RemoteInputSource): number | null {
-    if (this.state !== 'menu' || this.players.length >= 4) return null;
-    this.joinedSources.add(source.id);
-    this.addPlayer(source);
-    return this.players.length - 1;
-  }
-
-  /** 게스트 미러링용 상태 스냅샷 (20Hz 송출) */
-  buildSnapshot(): Snapshot {
-    return {
-      pl: this.players.map((p) => {
-        const t = p.body.translation();
-        return {
-          i: p.id,
-          p: [round2(t.x), round2(t.y), round2(t.z)] as [number, number, number],
-          yw: round3(p.yaw),
-          hd: (p.held ? 1 : 0) as 0 | 1,
-          ms: p.missingArmSides,
-          ind: p.indicatorPos
-            ? ([round2(p.indicatorPos.x), round2(p.indicatorPos.z)] as [number, number])
-            : (0 as const),
-        };
-      }),
-      pr: this.props.props.map((pr) => {
-        const t = pr.body.translation();
-        const q = pr.body.rotation();
-        return {
-          k: pr.uid,
-          id: pr.meta.id,
-          p: [round2(t.x), round2(t.y), round2(t.z)] as [number, number, number],
-          q: [round3(q.x), round3(q.y), round3(q.z), round3(q.w)] as [number, number, number, number],
-          au: pr.meta.armOwner !== undefined ? pr.meta.color : 0,
-          cl: (pr.cloaked ? 1 : 0) as 0 | 1,
-        };
-      }),
-    };
   }
 
   private botCount = 0;
 
   private addBot() {
-    if (this.players.length >= 4) return;
+    if (this.players.length >= MAX_PLAYERS) return;
     const source = new BotSource(this.botCount++);
     this.joinedSources.add(source.id);
     this.addPlayer(source);
@@ -223,18 +93,18 @@ export class Game {
     const [p1, p2] = this.input.schemes;
     const move = (s: typeof p1) =>
       `${kbd(keyName(s.up))}${kbd(keyName(s.left))}${kbd(keyName(s.down))}${kbd(keyName(s.right))}`;
-    const row = (who: string, color: string, moveKeys: string, action: string, jump: string) =>
+    const row = (who: string, color: string, scheme: typeof p1) =>
       `<span class="ctl-who" style="color:${color}">${who}</span>` +
-      `<span>${moveKeys}</span><span>${action}</span><span>${jump}</span>`;
+      `<span>${move(scheme)}</span><span>${kbd(keyName(scheme.action))}</span>` +
+      `<span>${kbd(keyName(scheme.jump))}</span>`;
     this.ui.setControlsHint(
       `<div class="ctl-table">` +
       `<span></span><span class="ctl-h">이동</span><span class="ctl-h">잡기 · 던지기</span><span class="ctl-h">점프</span>` +
-      row('P1', '#e4573d', move(p1), kbd(keyName(p1.action)), kbd(keyName(p1.jump))) +
-      row('P2', '#3d7de4', move(p2), kbd(keyName(p2.action)), kbd(keyName(p2.jump))) +
-      row('패드', '#e4b53d', '스틱', kbd('A'), kbd('B')) +
+      row('P1', '#e4573d', p1) +
+      row('P2', '#3d7de4', p2) +
       `</div>` +
       `<div class="ctl-meta">` +
-      `<span>${kbd('B')} AI 봇 추가</span><span>${kbd('V')} 음성 채팅</span><span>${kbd('K')} 키 변경</span>` +
+      `<span>${kbd('B')} AI 봇 추가</span><span>${kbd('K')} 키 변경</span>` +
       `</div>`,
     );
   }
@@ -282,15 +152,9 @@ export class Game {
         this.tickPhysicsOnly(dt);
         if (this.restartRequested && !this.reloading) {
           this.restartRequested = false;
-          // 온라인 방은 세션을 유지해야 하므로 리로드 대신 같은 방에서 재경기
-          if (this.hostSession) {
-            this.ui.hideResults();
-            this.beginMatch();
-          } else {
-            // reload는 딱 한 번만 — 매 틱 반복 호출되면 무한 로딩처럼 보인다
-            this.reloading = true;
-            location.reload();
-          }
+          // reload는 딱 한 번만 — 매 틱 반복 호출되면 무한 로딩처럼 보인다
+          this.reloading = true;
+          location.reload();
         }
         break;
     }
@@ -308,34 +172,30 @@ export class Game {
   /** 참가 카드에 표시할 입력 소스 태그 */
   private sourceTag(id: string): string {
     if (id.startsWith('bot')) return 'AI 봇';
-    if (id.startsWith('net')) return '온라인';
-    if (id.startsWith('pad')) return '게임패드';
     return '키보드';
   }
 
   private tickMenu() {
-    if (this.menuPhase === 'lobby') {
-      if (!this.rebinding) {
-        for (const src of this.input.allSources()) {
-          const st = src.getState();
-          if (st.actionPressed && !this.joinedSources.has(src.id) && this.players.length < 4) {
-            this.joinedSources.add(src.id);
-            this.addPlayer(src);
-          }
+    if (!this.rebinding) {
+      for (const src of this.input.allSources()) {
+        const st = src.getState();
+        if (st.actionPressed && !this.joinedSources.has(src.id) && this.players.length < MAX_PLAYERS) {
+          this.joinedSources.add(src.id);
+          this.addPlayer(src);
         }
       }
-      this.ui.showMenu(
-        this.players.map((p) => ({
-          tag: this.sourceTag(p.source.id),
-          color: PLAYER_COLORS[p.id],
-          name: PLAYER_NAMES[p.id],
-        })),
-        this.players.length >= 1,
-      );
-      if (this.players.length >= 1 && this.restartRequested) {
-        this.restartRequested = false;
-        this.beginMatch();
-      }
+    }
+    this.ui.showMenu(
+      this.players.map((p) => ({
+        tag: this.sourceTag(p.source.id),
+        color: PLAYER_COLORS[p.id],
+        name: PLAYER_NAMES[p.id],
+      })),
+      this.players.length >= 1,
+    );
+    if (this.players.length >= 1 && this.restartRequested) {
+      this.restartRequested = false;
+      this.beginMatch();
     }
     this.restartRequested = false;
     this.stepPhysics(1 / 60);
@@ -353,7 +213,7 @@ export class Game {
     this.topics = pickTopics(ROUNDS);
     this.round = 0;
     for (const p of this.players) p.score = 0;
-    // 2인 이상이면 라운드 하나(2~마지막)가 일치 라운드가 된다. ?match 로 전부 강제 가능
+    // 2인이면 라운드 하나(2~마지막)가 일치 라운드가 된다. ?match 로 전부 강제 가능
     this.roundTypes = Array(ROUNDS).fill('normal');
     const forceMatch = new URLSearchParams(location.search).has('match');
     if (this.players.length >= 2) {
@@ -396,27 +256,17 @@ export class Game {
   }
 
   /**
-   * 일치 라운드 준비 — 목표 프롭 복제본을 (인원수-1)개만 두고,
-   * 닮은꼴 미끼를 추가로 흩어놓는다. 의자앉기 + 낚시.
+   * 일치 라운드 목표 선정 — 의자앉기 + 낚시.
+   * 방에는 모든 물건이 딱 하나씩만 있으므로, 목표를 정하는 것만으로 "하나 모자란"
+   * 상황이 성립한다(2인 기준). 닮은꼴 미끼도 이미 방에 하나씩 깔려 있다.
    */
   private setupMatchRound(): PropMeta | null {
-    const need = this.players.length - 1;
-    const candidates = Object.keys(LOOKALIKES).filter((id) => {
-      const meta = PROP_CATALOG.find((m) => m.id === id);
-      return meta && this.props.countOf(id) <= need;
-    });
+    const candidates = Object.keys(LOOKALIKES).filter((id) =>
+      PROP_CATALOG.some((m) => m.id === id),
+    );
     if (candidates.length === 0) return null; // 조건 미달 → 일반 라운드로
     const targetId = candidates[Math.floor(Math.random() * candidates.length)];
-    const target = PROP_CATALOG.find((m) => m.id === targetId)!;
-    // 복제본을 정확히 need개로
-    for (let i = this.props.countOf(targetId); i < need; i++) this.props.spawnTemp(target);
-    // 닮은꼴 미끼는 넉넉하게 (종류당 최소 2개)
-    for (const fakeId of LOOKALIKES[targetId] ?? []) {
-      const fake = PROP_CATALOG.find((m) => m.id === fakeId);
-      if (!fake) continue;
-      for (let i = this.props.countOf(fakeId); i < 2; i++) this.props.spawnTemp(fake);
-    }
-    return target;
+    return PROP_CATALOG.find((m) => m.id === targetId)!;
   }
 
   private get currentTopic(): Topic {
@@ -470,7 +320,7 @@ export class Game {
       }
       let tug = this.tugs.get(prop);
       if (!tug) {
-        tug = { time: 0, limit: 1.3 + Math.random() * 1.2, effort: [0, 0, 0, 0] };
+        tug = { time: 0, limit: 1.3 + Math.random() * 1.2, effort: [0, 0] };
         this.tugs.set(prop, tug);
       }
       tug.time += dt;
