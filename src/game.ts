@@ -14,6 +14,7 @@ import { AirshipSystem } from './airship';
 import { sfx } from './sound';
 import { BotSource } from './bot';
 import type { AssetLibrary } from './assets';
+import { CharacterLibrary, createFallbackVisual } from './character';
 
 // ?fast — 개발·시연용 단축 라운드
 const FAST = new URLSearchParams(location.search).has('fast');
@@ -56,7 +57,7 @@ export class Game {
   private reloading = false;
   private rebinding = false;
 
-  constructor(container: HTMLElement, assets: AssetLibrary) {
+  constructor(container: HTMLElement, assets: AssetLibrary, private characters: CharacterLibrary) {
     this.world = new World3D(container);
     this.props = new PropManager(this.world, assets);
     // 프롭 제거 시 잡고 있던 조인트부터 해제
@@ -203,7 +204,9 @@ export class Game {
 
   private addPlayer(source: InputSource) {
     const id = this.players.length;
-    const player = new Player(id, source, this.world, this.props, SPAWNS[id]);
+    const color = PLAYER_COLORS[id];
+    const visual = this.characters.create(color) ?? createFallbackVisual(color);
+    const player = new Player(id, source, this.world, this.props, SPAWNS[id], visual);
     this.players.push(player);
     this.playersByCollider.set(player.collider.handle, player);
   }

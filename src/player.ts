@@ -8,7 +8,7 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import type { InputSource, InputState } from './input';
 import type { World3D } from './world';
 import type { Prop, PropManager } from './objects';
-import { createPlayerVisual, poseArms, CAPSULE_HALF, CAPSULE_R } from './visuals';
+import { CAPSULE_HALF, CAPSULE_R, type PlayerVisual } from './visuals';
 import { sfx } from './sound';
 
 const MOVE_SPEED = 4.6;
@@ -37,7 +37,6 @@ export class Player {
   indicatorPos: { x: number; z: number } | null = null;
   /** 잡기 가능한 프롭 아래 표시되는 링 */
   private indicator: THREE.Mesh;
-  private arms: { L: THREE.Mesh; R: THREE.Mesh };
 
   constructor(
     public id: number,
@@ -45,6 +44,7 @@ export class Player {
     private world: World3D,
     private propMgr: PropManager,
     spawn: THREE.Vector3,
+    private visual: PlayerVisual,
   ) {
     this.body = world.physics.createRigidBody(
       RAPIER.RigidBodyDesc.dynamic()
@@ -61,9 +61,7 @@ export class Player {
       this.body,
     );
 
-    const visual = createPlayerVisual(PLAYER_COLORS[this.id]);
     this.group = visual.group;
-    this.arms = visual.arms;
     world.scene.add(this.group);
 
     this.indicator = new THREE.Mesh(
@@ -154,8 +152,8 @@ export class Player {
     this.group.position.set(t.x, t.y, t.z);
     this.group.quaternion.set(r.x, r.y, r.z, r.w);
 
-    // 팔 자세 — 들고 있으면 앞으로 뻗기
-    poseArms(this.arms, this.held !== null);
+    // 캐릭터 애니메이션 — 이동 중이면 걷기, 아니면 대기
+    this.visual.update(dt, this.lastMoveMag > 0.05, this.held !== null);
 
     // 그랩 가능 표시 링
     this.indicatorPos = null;
@@ -191,6 +189,7 @@ export class Player {
     const prop = this.findCandidate();
     if (!prop) return;
     sfx.grab();
+    this.visual.trigger('grab');
     const params = RAPIER.JointData.spherical(
       { x: HAND_LOCAL.x, y: HAND_LOCAL.y, z: HAND_LOCAL.z },
       { x: 0, y: 0, z: 0 },
@@ -205,6 +204,7 @@ export class Player {
     if (!prop) return;
     this.release();
     sfx.throw();
+    this.visual.trigger('throw');
     // 무거울수록 느리게 날아간다
     const mass = prop.body.mass();
     const speed = Math.max(5, 13 - mass * 0.006);
@@ -228,6 +228,7 @@ export class Player {
   /** 던진 물건에 맞음 — 들고 있던 물건 낙하 + 넉백 */
   onHit(fromDir: THREE.Vector3) {
     sfx.bonk();
+    this.visual.trigger('hit');
     this.release();
     const kb = fromDir.clone().setY(0).normalize().multiplyScalar(900);
     this.body.applyImpulse({ x: kb.x, y: 350, z: kb.z }, true);

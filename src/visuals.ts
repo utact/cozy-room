@@ -6,13 +6,20 @@ import type { PropMeta, PropShape } from './catalog';
 export const CAPSULE_HALF = 0.42;
 export const CAPSULE_R = 0.34;
 
+/**
+ * 플레이어 외형 — 생성형 GLB 캐릭터와 절차적 캡슐이 공유하는 인터페이스.
+ * player.ts 는 어느 쪽인지 모른 채 update/trigger 만 호출한다.
+ */
 export interface PlayerVisual {
-  group: THREE.Group;
-  arms: { L: THREE.Mesh; R: THREE.Mesh };
+  readonly group: THREE.Group;
+  /** 매 틱 — moving 은 이동 입력 중인지, held 는 물건을 들고 있는지 */
+  update(dt: number, moving: boolean, held: boolean): void;
+  /** 1회성 동작 */
+  trigger(action: 'grab' | 'throw' | 'hit'): void;
 }
 
-/** 캡슐 캐릭터 (눈·팔) */
-export function createPlayerVisual(color: number): PlayerVisual {
+/** 캡슐 캐릭터 (눈·팔) — GLB가 없을 때의 폴백 */
+export function createProceduralPlayerVisual(color: number): PlayerVisual {
   const group = new THREE.Group();
   const bodyMat = new THREE.MeshStandardMaterial({ color, roughness: 0.6 });
   const capsule = new THREE.Mesh(
@@ -36,7 +43,7 @@ export function createPlayerVisual(color: number): PlayerVisual {
     group.add(pupil);
   }
   const armMat = new THREE.MeshStandardMaterial({ color, roughness: 0.6 });
-  const arms = {} as PlayerVisual['arms'];
+  const arms = {} as { L: THREE.Mesh; R: THREE.Mesh };
   for (const [key, side] of [['L', -1], ['R', 1]] as const) {
     const arm = new THREE.Mesh(new THREE.CapsuleGeometry(0.085, 0.24, 4, 10), armMat);
     arm.castShadow = true;
@@ -45,18 +52,25 @@ export function createPlayerVisual(color: number): PlayerVisual {
     group.add(arm);
     arms[key] = arm;
   }
-  return { group, arms };
-}
 
-/** 팔 자세 블렌딩 — held 여부에 따라 앞으로 뻗기 */
-export function poseArms(arms: PlayerVisual['arms'], held: boolean) {
-  for (const [key, side] of [['L', -1], ['R', 1]] as const) {
-    const targetX = held ? -1.15 : 0;
-    const targetZ = held ? side * 0.15 : side * 0.55;
-    const arm = arms[key];
-    arm.rotation.x += (targetX - arm.rotation.x) * 0.2;
-    arm.rotation.z += (targetZ - arm.rotation.z) * 0.2;
-  }
+  // 관절이 없으므로 '동작'은 팔을 앞으로 뻗는 것과 짧은 반동뿐이다
+  let reach = 0; // 0 = 옆으로, 1 = 앞으로
+  let recoil = 0; // 1회성 동작 후 잔여 시간
+  return {
+    group,
+    update(dt, moving, held) {
+      const target = recoil > 0 || held ? 1 : moving ? 0.25 : 0;
+      reach += (target - reach) * 0.2;
+      recoil = Math.max(0, recoil - dt);
+      for (const [key, side] of [['L', -1], ['R', 1]] as const) {
+        arms[key].rotation.x = -1.15 * reach;
+        arms[key].rotation.z = side * (0.55 - 0.4 * reach);
+      }
+    },
+    trigger() {
+      recoil = 0.25;
+    },
+  };
 }
 
 export function buildGeometry(shape: PropShape, size: [number, number, number]): THREE.BufferGeometry {
