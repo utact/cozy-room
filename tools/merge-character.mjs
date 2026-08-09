@@ -27,10 +27,12 @@ const OUT = fileURLToPath(new URL('../public/assets/characters/', import.meta.ur
 
 /** 파일명 조각 → 게임에서 쓸 클립 이름 */
 const CLIPS = [
-  { match: 'Walking', name: 'walk' },
-  { match: 'Crouch_Pick_Up', name: 'pickup' },
-  { match: 'Left_Hook', name: 'throw' },
-  { match: 'Hit_Reaction', name: 'hit' },
+  { match: 'jelly-walk', name: 'walk' },
+  { match: 'jelly-pickup', name: 'pickup' },
+  { match: 'jelly-throw', name: 'throw' },
+  { match: 'jelly-hit', name: 'hit' },
+  { match: 'jelly-lobby', name: 'lobby' }, // 로비 대기 — 두리번거리는 idle
+  { match: 'jelly-win', name: 'win' },     // 결과 화면 우승 세레모니 (춤)
 ];
 
 const JSON_CHUNK = 0x4e4f534a;

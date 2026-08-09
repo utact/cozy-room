@@ -3,6 +3,9 @@ dist
 .DS_Store
 *.log
 
+# 브라우저 자동화 도구가 남기는 스냅샷·스크린샷
+.playwright-mcp
+
 # 비밀키 — 절대 커밋 금지
 server/.env
 .env
