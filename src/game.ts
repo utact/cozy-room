@@ -5,8 +5,8 @@ import { World3D } from './world';
 import { PropManager, type Prop } from './objects';
 import { Player, PLAYER_COLORS, PLAYER_NAMES } from './player';
 import { InputManager, keyName, type InputSource } from './input';
-import { UI, kbd } from './ui';
-import { LocalJudge, winnerComment, josa, matchPunchline, matchComment, type JudgeEntry } from './judge';
+import { UI } from './ui';
+import { LocalJudge, josa, matchPunchline, matchComment, type JudgeEntry } from './judge';
 import { pickTopics, type Topic } from './topics';
 import { PROP_CATALOG, LOOKALIKES, type PropMeta } from './catalog';
 import { pickEvent, type EventCtx, type RoundEvent } from './events';
@@ -23,11 +23,14 @@ const SCRAMBLE_TIME = FAST ? 6 : 25;
 const ROUNDS = 3;
 const FIXED_DT = 1 / 60;
 
-const MAX_PLAYERS = 2;
+// 1~2번 슬롯은 키보드, 3~4번은 AI 전용 — 정원은 색상 배열에 맞춰 자동으로 따라간다
+const MAX_PLAYERS = PLAYER_COLORS.length;
 
 const SPAWNS = [
   new THREE.Vector3(-5.5, 1.2, 3.5),
   new THREE.Vector3(5.5, 1.2, 3.5),
+  new THREE.Vector3(-5.5, 1.2, -3.5),
+  new THREE.Vector3(5.5, 1.2, -3.5),
 ];
 
 type State = 'menu' | 'topic' | 'scramble' | 'judging' | 'results';
@@ -55,7 +58,6 @@ export class Game {
   private lastTime = performance.now();
   private restartRequested = false;
   private reloading = false;
-  private rebinding = false;
 
   constructor(container: HTMLElement, assets: AssetLibrary, private characters: CharacterLibrary) {
     this.world = new World3D(container);
@@ -65,15 +67,14 @@ export class Game {
       for (const id of [...prop.heldBy]) this.players[id]?.release();
     };
     this.ui = new UI(container);
+    this.ui.setPortraits(this.characters.renderPortraits(PLAYER_COLORS));
+    this.ui.setStageFactory((color, clip) => this.characters.createStage(color, clip));
     this.airship = new AirshipSystem(this.world, this.props);
     this.airship.onPulse = (t) => this.ui.pulseEvent(t);
-    this.refreshControlsHint();
     this.ui.showLobbyScreen();
     window.addEventListener('keydown', (e) => {
-      if (this.rebinding) return;
       if (e.code === 'KeyR') this.restartRequested = true;
       if (this.state !== 'menu') return;
-      if (e.code === 'KeyK') this.startRebind();
       if (e.code === 'KeyB') this.addBot();
     });
   }
@@ -88,41 +89,6 @@ export class Game {
     const bot = this.players[this.players.length - 1];
     source.bind(bot, this.players, this.props);
     sfx.grab();
-  }
-
-  private refreshControlsHint() {
-    const [p1, p2] = this.input.schemes;
-    const move = (s: typeof p1) =>
-      `${kbd(keyName(s.up))}${kbd(keyName(s.left))}${kbd(keyName(s.down))}${kbd(keyName(s.right))}`;
-    const row = (who: string, color: string, scheme: typeof p1) =>
-      `<span class="ctl-who" style="color:${color}">${who}</span>` +
-      `<span>${move(scheme)}</span><span>${kbd(keyName(scheme.action))}</span>` +
-      `<span>${kbd(keyName(scheme.jump))}</span>`;
-    this.ui.setControlsHint(
-      `<div class="ctl-table">` +
-      `<span></span><span class="ctl-h">이동</span><span class="ctl-h">잡기 · 던지기</span><span class="ctl-h">점프</span>` +
-      row('P1', '#e4573d', p1) +
-      row('P2', '#3d7de4', p2) +
-      `</div>` +
-      `<div class="ctl-meta">` +
-      `<span>${kbd('B')} AI 봇 추가</span><span>${kbd('K')} 키 변경</span>` +
-      `</div>`,
-    );
-  }
-
-  private async startRebind() {
-    this.rebinding = true;
-    try {
-      await this.input.rebindScheme(0, (msg) => this.ui.setRebindPrompt(msg));
-      await this.input.rebindScheme(1, (msg) => this.ui.setRebindPrompt(msg));
-      this.ui.setRebindPrompt('저장 완료!');
-    } finally {
-      this.refreshControlsHint();
-      setTimeout(() => {
-        this.ui.setRebindPrompt(null);
-        this.rebinding = false;
-      }, 900);
-    }
   }
 
   start() {
@@ -170,31 +136,29 @@ export class Game {
   // ── 메뉴: 소스별 액션 버튼으로 참가 ──
   private joinedSources = new Set<string>();
 
-  /** 참가 카드에 표시할 입력 소스 태그 */
-  private sourceTag(id: string): string {
-    if (id.startsWith('bot')) return 'AI 봇';
-    return '키보드';
-  }
 
   private tickMenu() {
-    if (!this.rebinding) {
-      for (const src of this.input.allSources()) {
-        const st = src.getState();
-        if (st.actionPressed && !this.joinedSources.has(src.id) && this.players.length < MAX_PLAYERS) {
-          this.joinedSources.add(src.id);
-          this.addPlayer(src);
-        }
+    for (const src of this.input.allSources()) {
+      const st = src.getState();
+      if (st.actionPressed && !this.joinedSources.has(src.id) && this.players.length < MAX_PLAYERS) {
+        this.joinedSources.add(src.id);
+        this.addPlayer(src);
       }
     }
     this.ui.showMenu(
       this.players.map((p) => ({
-        tag: this.sourceTag(p.source.id),
+        bot: p.source.id.startsWith('bot'),
         color: PLAYER_COLORS[p.id],
         name: PLAYER_NAMES[p.id],
       })),
-      this.players.length >= 1,
+      this.players.length >= 2, // 뺏고 던질 상대가 있어야 게임이 성립한다 — 혼자서는 시작 불가
+      MAX_PLAYERS,
+      this.input.schemes.map((s) => ({
+        up: keyName(s.up), down: keyName(s.down), left: keyName(s.left), right: keyName(s.right),
+        action: keyName(s.action),
+      })),
     );
-    if (this.players.length >= 1 && this.restartRequested) {
+    if (this.players.length >= 2 && this.restartRequested) {
       this.restartRequested = false;
       this.beginMatch();
     }
@@ -500,7 +464,7 @@ export class Game {
     const rows = [...this.players]
       .sort((a, b) => b.score - a.score)
       .map((p) => ({ name: PLAYER_NAMES[p.id], color: PLAYER_COLORS[p.id], score: p.score }));
-    this.ui.showResults(rows, winnerComment(rows[0].name));
+    this.ui.showResults(rows);
   }
 }
 
