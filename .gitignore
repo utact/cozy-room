@@ -9,3 +9,5 @@ dist
 # 비밀키 — 절대 커밋 금지
 server/.env
 .env
+asset-viewer.html
+public/_preview/
