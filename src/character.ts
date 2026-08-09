@@ -84,7 +84,7 @@ function tintedMaterial(src: THREE.MeshStandardMaterial, color: number): THREE.M
  * 크기는 지오메트리 좌표 그대로다 (여기선 1.7). 그래서 노드 트랜스폼을 빼고
  * 지오메트리 bbox 만 합친다.
  */
-function measureHeight(root: THREE.Object3D): number {
+function measureGeometryBox(root: THREE.Object3D): THREE.Box3 {
   const box = new THREE.Box3();
   root.traverse((o) => {
     const mesh = o as THREE.Mesh;
@@ -92,8 +92,23 @@ function measureHeight(root: THREE.Object3D): number {
     if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
     box.union(mesh.geometry.boundingBox!);
   });
-  const h = box.getSize(new THREE.Vector3()).y;
+  return box;
+}
+
+function measureHeight(root: THREE.Object3D): number {
+  const h = measureGeometryBox(root).getSize(new THREE.Vector3()).y;
   return h > 0.01 ? h : TARGET_HEIGHT; // 측정 실패 시 스케일 1
+}
+
+/**
+ * 대상이 화면에 다 들어오는 카메라 거리.
+ *
+ * 세로만 맞추면 팔처럼 옆으로 뻗은 부분이 좌우로 잘린다. 세로·가로 각각 필요한
+ * 거리를 구해 더 먼 쪽을 쓴다.
+ */
+function fitDistance(halfH: number, halfW: number, fovDeg: number, aspect: number): number {
+  const t = Math.tan(THREE.MathUtils.degToRad(fovDeg / 2));
+  return Math.max(halfH / t, halfW / t / aspect);
 }
 
 export class CharacterLibrary {
@@ -187,6 +202,13 @@ export class CharacterLibrary {
 
     // 그룹 좌표계: 발바닥 -TARGET_HEIGHT/2, 정수리 +TARGET_HEIGHT/2 근방
     const half = TARGET_HEIGHT / 2;
+    // 팔을 포함한 실제 반폭 — 모델에서 직접 잰다
+    const probe = this.create(colors[0]);
+    const geoBox = probe ? measureGeometryBox(probe.group) : null;
+    const geoSize = geoBox?.getSize(new THREE.Vector3());
+    const halfBodyWidth = geoSize && geoSize.y > 0.01
+      ? (geoSize.x / 2) * (TARGET_HEIGHT / geoSize.y)  // 렌더 스케일로 환산
+      : half * 0.72;
     const shots = [
       { out: bust, w: 220, h: 260, top: half + 0.06, bottom: -0.05, pad: 1.15 },
       { out: full, w: 240, h: 400, top: half + 0.12, bottom: -half - 0.06, pad: 1.08 },
@@ -205,8 +227,10 @@ export class CharacterLibrary {
       const centerY = (shot.top + shot.bottom) / 2;
       const halfH = ((shot.top - shot.bottom) / 2) * shot.pad;
       const fov = 32;
-      const dist = halfH / Math.tan(THREE.MathUtils.degToRad(fov / 2));
-      const camera = new THREE.PerspectiveCamera(fov, shot.w / shot.h, 0.1, 12);
+      const aspect = shot.w / shot.h;
+      // 세로만 맞추면 팔이 좌우로 잘린다 — 가로 폭도 같이 본다
+      const dist = fitDistance(halfH, halfBodyWidth * shot.pad, fov, aspect);
+      const camera = new THREE.PerspectiveCamera(fov, aspect, 0.1, 12);
       camera.position.set(0, centerY, dist);
       camera.lookAt(0, centerY, 0);
 
@@ -264,8 +288,11 @@ export class CharacterStage {
     this.scene.add(rim);
     this.scene.add(group);
 
-    // 캐릭터 키에 딱 맞춘 화각 — 팔을 뻗는 동작을 감안해 15%만 여유를 둔다
-    this.halfExtent = (TARGET_HEIGHT / 2) * 1.15;
+    // 캐릭터 크기에 맞춘 화각 — 팔을 뻗는 동작을 감안해 여유를 둔다
+    const size = measureGeometryBox(group).getSize(new THREE.Vector3());
+    const scale = size.y > 0.01 ? TARGET_HEIGHT / size.y : 1;
+    this.halfExtent = (TARGET_HEIGHT / 2) * 1.18;
+    this.halfWidth = size.y > 0.01 ? (size.x / 2) * scale * 1.18 : this.halfExtent * 0.72;
     this.camera = new THREE.PerspectiveCamera(FOV, 1, 0.1, 20);
     this.camera.lookAt(0, 0, 0);
 
@@ -274,6 +301,7 @@ export class CharacterStage {
   }
 
   private halfExtent: number;
+  private halfWidth: number;
 
   /**
    * 캔버스 픽셀 크기를 요소 실제 크기에 맞춘다.
@@ -286,10 +314,7 @@ export class CharacterStage {
     if (w < 1 || h < 1) return;
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
-    // 가로가 좁으면 세로 화각만으로는 좌우가 잘린다 — 좁은 쪽 기준으로 거리를 잡는다
-    const vFit = this.halfExtent / Math.tan(THREE.MathUtils.degToRad(FOV / 2));
-    const hFit = (this.halfExtent * 0.42) / Math.tan(THREE.MathUtils.degToRad(FOV / 2)) / this.camera.aspect;
-    this.camera.position.set(0, 0, Math.max(vFit, hFit));
+    this.camera.position.set(0, 0, fitDistance(this.halfExtent, this.halfWidth, FOV, this.camera.aspect));
     this.camera.updateProjectionMatrix();
   }
 
