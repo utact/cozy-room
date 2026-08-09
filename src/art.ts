@@ -8,7 +8,8 @@
 
 export interface ArtAsset {
   local: string;
-  remote: string;
+  /** CDN 백업 — 원격 소스가 없는(로컬 전용) 에셋은 생략 가능 */
+  remote?: string;
 }
 
 const CDN = 'https://d8j0ntlcm91z4.cloudfront.net/user_3GOqsfd5P2KANwOZMG13mVTJvX3';
@@ -16,7 +17,7 @@ const CDN = 'https://d8j0ntlcm91z4.cloudfront.net/user_3GOqsfd5P2KANwOZMG13mVTJv
 export const ART = {
   /** 타이틀 로고 (투명 배경) */
   logo: {
-    local: 'assets/ui/logo.png',
+    local: 'assets/ui/logo.webp',
     remote: `${CDN}/hf_20260712_111726_9b9d247b-1447-443a-943b-1b43d95fb751.png`,
   },
   /** 메뉴 배경 키 비주얼 (16:9) */
@@ -34,11 +35,16 @@ export const ART = {
     local: 'assets/ui/judge.png',
     remote: `${CDN}/hf_20260712_111746_5fed78a7-549d-43a7-b29c-e7688f475d70.png`,
   },
+  /** 타이틀 리본 배지 — "2~4인 물리 난투!" 텍스트가 이미지에 포함됨, 로컬 전용 */
+  ribbonBadge: {
+    local: 'assets/ui/ribbon-badge.webp',
+  },
 } satisfies Record<string, ArtAsset>;
 
 /** 로컬 → 원격 순서로 로드를 시도하고, 성공한 URL(또는 null)을 콜백 */
 export function loadArt(asset: ArtAsset, cb: (url: string | null) => void) {
-  const attempt = (url: string, onFail: () => void) => {
+  const attempt = (url: string | undefined, onFail: () => void) => {
+    if (!url) { onFail(); return; }
     const img = new Image();
     img.onload = () => cb(url);
     img.onerror = onFail;

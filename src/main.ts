@@ -11,9 +11,10 @@ async function boot() {
   await Promise.all([RAPIER.init(), assets.load(), characters.load()]);
   const game = new Game(container, assets, characters);
   game.start();
-  // 개발·자동화 테스트용 디버그 핸들
-  const w = window as unknown as Record<string, unknown>;
-  w.__cozy = game;
+  // 개발·자동화 테스트용 핸들 — 프로덕션 번들에는 포함되지 않는다
+  if (import.meta.env.DEV) {
+    (window as unknown as Record<string, unknown>).__cozy = game;
+  }
 }
 
 boot().catch((err) => {
