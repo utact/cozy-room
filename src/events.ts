@@ -1,17 +1,23 @@
-/** 라운드 랜덤 이벤트 — 리플레이성을 위한 '한 스푼'. 난투 중에만 활성화된다. */
+/**
+ * 라운드 모드 — 콘셉트가 허용한 것만 발동한다.
+ *
+ * 모드는 그냥 일어나지 않는다. 방 안의 장치가 원인이어야 한다.
+ * 돌풍은 뒷벽 창문에서 불어오고, 정전은 그 창문만 남기고 불이 꺼진다.
+ * 진동은 원인이 윗집이라 화면 밖에 있으므로, 대신 플레이어의 몸이 증거가 된다.
+ */
 
 import * as THREE from 'three';
-import { ROOM_W, ROOM_D, type World3D } from './world';
+import { ROOM_D, type World3D } from './world';
 import type { Player } from './player';
 import type { Prop, PropManager } from './objects';
-import { cloakObject, uncloakObject, buildAbstractVisual } from './visuals';
+import { cloakObject, uncloakObject } from './visuals';
 import { sfx } from './sound';
 
 export interface EventCtx {
   world: World3D;
   players: Player[];
   props: PropManager;
-  /** 돌풍 등 순간 연출용 콜백 */
+  /** 순간 연출용 콜백 */
   pulse: (text: string) => void;
 }
 
@@ -24,67 +30,39 @@ export interface RoundEvent {
   end(ctx: EventCtx): void;
 }
 
-const slippery: RoundEvent = {
-  id: 'slippery',
-  title: '바닥 왁스칠!',
-  desc: '속도는 붙는데 브레이크가 없다… 과속 주의!',
-  start(ctx) {
-    ctx.world.floorCollider.setFriction(0.02);
-    for (const p of ctx.players) p.slippery = true;
-  },
-  end(ctx) {
-    ctx.world.floorCollider.setFriction(0.9);
-    for (const p of ctx.players) p.slippery = false;
-  },
-};
-
-const moon: RoundEvent = {
-  id: 'moon',
-  title: '달 중력!',
-  desc: '중력이 가출했다. 모든 것이 붕붕 뜬다!',
-  start(ctx) {
-    ctx.world.physics.gravity = { x: 0, y: -2.6, z: 0 };
-  },
-  end(ctx) {
-    ctx.world.physics.gravity = { x: 0, y: -9.81, z: 0 };
-  },
-};
-
-/** 8방위 화살표 — 바람 방향 안내용 */
-function dirArrow(x: number, z: number): string {
-  const arrows = ['→', '↘', '↓', '↙', '←', '↖', '↑', '↗'];
-  // 화면 기준: +x 오른쪽, +z 아래
-  const angle = Math.atan2(z, x);
-  const idx = ((Math.round(angle / (Math.PI / 4)) % 8) + 8) % 8;
-  return arrows[idx];
-}
-
 /**
- * 돌풍 — 잠잠함(2~3초)과 강풍(2.6초)이 번갈아 온다.
- * 강풍 동안 매 틱 지속적인 힘 + 굴림 토크가 작용해 물건이 바람에 '굴러간다'.
- * 바람 방향은 화면을 가로지르는 스트릭 파티클로 보인다.
+ * 돌풍 — 뒷벽 창문에서 앞벽 쪽(+z)으로 분다. 방향은 창문 위치가 정하므로 항상 같다.
+ *
+ * 방 전체가 아니라 창문 앞 띠 구역에만 힘이 작용한다. 그래서 존을 좌우로 가로지르는
+ * 플레이어는 안에 있는 동안만 하류로 밀리고, 벗어나면 즉시 정상으로 돌아온다.
  */
 class WindEvent implements RoundEvent {
   id = 'wind';
-  title = '돌풍 주의보!';
-  desc = '창문을 안 닫았다! 강풍이 물건을 쓸어간다!';
+  title = '누가 또 창문 안 닫았어!';
+  desc = '창가를 지나가면 떠밀린다. 강풍이 물건을 쓸어간다!';
+
+  /** 창문 x중심 기준 띠의 반폭 */
+  private static readonly ZONE_HALF_W = 2.5;
+
   private phase: 'calm' | 'blow' = 'calm';
   private timer = 1.6;
-  private dir = { x: 1, z: 0 };
   private streaks: THREE.Group | null = null;
+  private originX = 0;
 
   start(ctx: EventCtx) {
     this.phase = 'calm';
     this.timer = 1.6;
-    // 스트릭 파티클 — 바람 방향으로 흐르는 흰 줄
+    // 바람의 출처는 콘셉트가 정의한 창문이다
+    this.originX = ctx.world.concept.decals.find((d) => d.tex === 'window')?.x ?? 0;
+
     this.streaks = new THREE.Group();
-    const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.32 });
-    for (let i = 0; i < 34; i++) {
+    const mat = new THREE.MeshBasicMaterial({ color: 0xfff2dd, transparent: true, opacity: 0.3 });
+    for (let i = 0; i < 30; i++) {
       const len = 0.9 + Math.random() * 1.3;
-      const streak = new THREE.Mesh(new THREE.BoxGeometry(len, 0.025, 0.025), mat);
+      const streak = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.025, len), mat);
       streak.position.set(
-        (Math.random() - 0.5) * ROOM_W,
-        0.3 + Math.random() * 2.4,
+        this.originX + (Math.random() - 0.5) * WindEvent.ZONE_HALF_W * 2,
+        0.3 + Math.random() * 2.0,
         (Math.random() - 0.5) * ROOM_D,
       );
       this.streaks.add(streak);
@@ -93,54 +71,50 @@ class WindEvent implements RoundEvent {
     ctx.world.scene.add(this.streaks);
   }
 
+  private inZone(x: number): boolean {
+    return Math.abs(x - this.originX) <= WindEvent.ZONE_HALF_W;
+  }
+
   tick(ctx: EventCtx, dt: number) {
+    ctx.world.setCurtainWind(this.phase === 'blow' ? 1 : 0);
     this.timer -= dt;
+
     if (this.phase === 'calm') {
       if (this.timer <= 0) {
         this.phase = 'blow';
         this.timer = 2.6;
-        const angle = Math.random() * Math.PI * 2;
-        this.dir = { x: Math.cos(angle), z: Math.sin(angle) };
-        // 스트릭을 바람 방향으로 정렬
-        if (this.streaks) {
-          this.streaks.visible = true;
-          const yaw = Math.atan2(-this.dir.z, this.dir.x);
-          for (const s of this.streaks.children) s.rotation.y = yaw;
-        }
+        if (this.streaks) this.streaks.visible = true;
         sfx.gust();
-        ctx.pulse(`강풍 ${dirArrow(this.dir.x, this.dir.z)}`);
+        ctx.pulse('강풍 ↓');
       }
       return;
     }
-    // 강풍 — 지속적인 힘 (질량 비례, 매 틱 적분)
+
+    // 강풍 — 존 안에서만, 항상 +z 방향 (질량 비례로 매 틱 적분)
     for (const p of ctx.players) {
+      if (!this.inZone(p.position.x)) continue;
       const m = p.body.mass();
-      p.body.applyImpulse({ x: this.dir.x * m * 4.5 * dt, y: 0, z: this.dir.z * m * 4.5 * dt }, true);
+      p.body.applyImpulse({ x: 0, y: 0, z: m * 4.5 * dt }, true);
     }
     for (const prop of ctx.props.props) {
+      if (!this.inZone(prop.position.x)) continue;
       const m = prop.body.mass();
-      prop.body.applyImpulse(
-        { x: this.dir.x * m * 7 * dt, y: m * 1.4 * dt, z: this.dir.z * m * 7 * dt },
-        true,
-      );
+      prop.body.applyImpulse({ x: 0, y: m * 1.4 * dt, z: m * 7 * dt }, true);
       // 굴림 토크 — 바람에 데굴데굴 굴러가는 느낌
-      prop.body.applyTorqueImpulse(
-        { x: this.dir.z * m * 0.9 * dt, y: 0, z: -this.dir.x * m * 0.9 * dt },
-        true,
-      );
+      prop.body.applyTorqueImpulse({ x: m * 0.9 * dt, y: 0, z: 0 }, true);
     }
-    // 스트릭 이동 — 방 밖으로 나가면 반대편에서 재등장
+
     if (this.streaks) {
       for (const s of this.streaks.children) {
-        s.position.x += this.dir.x * 11 * dt;
-        s.position.z += this.dir.z * 11 * dt;
-        if (Math.abs(s.position.x) > ROOM_W / 2 + 1 || Math.abs(s.position.z) > ROOM_D / 2 + 1) {
-          s.position.x = -this.dir.x * (ROOM_W / 2) + (Math.random() - 0.5) * 4;
-          s.position.z = -this.dir.z * (ROOM_D / 2) + (Math.random() - 0.5) * 4;
-          s.position.y = 0.3 + Math.random() * 2.4;
+        s.position.z += 11 * dt;
+        if (s.position.z > ROOM_D / 2 + 1) {
+          s.position.z = -ROOM_D / 2;
+          s.position.x = this.originX + (Math.random() - 0.5) * WindEvent.ZONE_HALF_W * 2;
+          s.position.y = 0.3 + Math.random() * 2.0;
         }
       }
     }
+
     if (this.timer <= 0) {
       this.phase = 'calm';
       this.timer = 2.0 + Math.random() * 1.4;
@@ -149,6 +123,7 @@ class WindEvent implements RoundEvent {
   }
 
   end(ctx: EventCtx) {
+    ctx.world.setCurtainWind(0);
     if (this.streaks) {
       ctx.world.scene.remove(this.streaks);
       this.streaks = null;
@@ -157,17 +132,74 @@ class WindEvent implements RoundEvent {
 }
 
 /**
- * 미스터리 룸 — 모든 프롭이 실루엣으로 변한다.
- * 한 번이라도 잡은 물건만 정체(색·이름)가 드러난다. 초기 회색 상자 시절의 재미를 모드화.
+ * 진동 — 윗집이 쿵쿵거린다.
+ *
+ * 원인이 화면 밖에 있고 천장도 없어서 매달아 흔들 물건을 둘 수 없다. 그래서 이 모드는
+ * **플레이어의 몸**을 증거로 삼는다. 쿵 할 때마다 캐릭터가 떴다가 가라앉고, 프롭도 같이 튄다.
  */
-class MysteryEvent implements RoundEvent {
-  id = 'mystery';
-  title = '미스터리 룸!';
-  desc = '물건이 전부 실루엣이다. 직접 잡아야 정체를 안다!';
-  private saved = new Map<THREE.Mesh, THREE.Material | THREE.Material[]>();
-  private active: Prop[] = [];
+class RumbleEvent implements RoundEvent {
+  id = 'rumble';
+  title = '윗집에서 또 쿵쿵거려!';
+  desc = '바닥이 울린다. 몸도 물건도 같이 떠오른다!';
+
+  private next = 0.8;
 
   start(ctx: EventCtx) {
+    // 달 중력만큼 띄우면 "묵직한데 살짝 가벼워진" 체감과 어긋난다
+    ctx.world.physics.gravity = { x: 0, y: -6.5, z: 0 };
+    this.next = 0.8;
+  }
+
+  tick(ctx: EventCtx, dt: number) {
+    this.next -= dt;
+    if (this.next > 0) return;
+    // 층간소음은 규칙적이지 않다 — 간격을 흔들어야 진짜 같다
+    this.next = 1.3 + Math.random() * 0.3;
+
+    for (const p of ctx.players) {
+      const m = p.body.mass();
+      p.body.applyImpulse({ x: 0, y: m * 3.4, z: 0 }, true);
+    }
+    for (const prop of ctx.props.props) {
+      if (prop.heldBy.size > 0) continue;
+      const m = prop.body.mass();
+      prop.body.applyImpulse(
+        { x: (Math.random() - 0.5) * m * 0.6, y: m * 2.6, z: (Math.random() - 0.5) * m * 0.6 },
+        true,
+      );
+    }
+    ctx.world.shake(0.35);
+    sfx.thump();
+  }
+
+  end(ctx: EventCtx) {
+    ctx.world.physics.gravity = { x: 0, y: -9.81, z: 0 };
+  }
+}
+
+/**
+ * 정전 — 불이 나가고 창문으로 드는 빛만 남는다.
+ * 프롭은 실루엣이 되고, 직접 잡은 것만 정체가 드러난다.
+ */
+class BlackoutEvent implements RoundEvent {
+  id = 'blackout';
+  title = '정전이야!';
+  desc = '물건이 실루엣만 보인다. 잡아봐야 정체를 안다!';
+
+  private saved = new Map<THREE.Mesh, THREE.Material | THREE.Material[]>();
+  private active: Prop[] = [];
+  private lamps: THREE.PointLight[] = [];
+
+  start(ctx: EventCtx) {
+    ctx.world.setDim(0.12);
+    sfx.blackout();
+
+    // 각자 손에 든 것 주변만 겨우 보이는 개인 광원
+    for (let i = 0; i < ctx.players.length; i++) {
+      const lamp = new THREE.PointLight(0xffc978, 9, 4.5, 1.8);
+      ctx.world.scene.add(lamp);
+      this.lamps.push(lamp);
+    }
     for (const prop of ctx.props.props) {
       cloakObject(prop.mesh, this.saved);
       prop.cloaked = true;
@@ -176,6 +208,12 @@ class MysteryEvent implements RoundEvent {
   }
 
   tick(ctx: EventCtx) {
+    ctx.players.forEach((p, i) => {
+      const lamp = this.lamps[i];
+      if (!lamp) return;
+      const pos = p.position;
+      lamp.position.set(pos.x, pos.y + 1.1, pos.z);
+    });
     // 잡는 순간 정체 공개 (이후 계속 공개 상태 유지)
     for (const prop of ctx.props.props) {
       if (prop.heldBy.size > 0 && prop.cloaked) {
@@ -186,7 +224,10 @@ class MysteryEvent implements RoundEvent {
     }
   }
 
-  end() {
+  end(ctx: EventCtx) {
+    ctx.world.setDim(1);
+    for (const lamp of this.lamps) ctx.world.scene.remove(lamp);
+    this.lamps = [];
     for (const prop of this.active) {
       if (prop.cloaked) {
         uncloakObject(prop.mesh, this.saved);
@@ -198,57 +239,24 @@ class MysteryEvent implements RoundEvent {
   }
 }
 
+const FACTORIES: Record<string, () => RoundEvent> = {
+  wind: () => new WindEvent(),
+  rumble: () => new RumbleEvent(),
+  blackout: () => new BlackoutEvent(),
+};
+
 /**
- * 사물들이 이상해졌다 — 모든 프롭이 회색 프리미티브(정육면체·구·원뿔 등)로 변한다.
- * 미스터리(실루엣)보다 한 단계 더 추상적: 색·디테일이 전부 사라지고 대략의 형태만 남아,
- * 직접 잡아봐야 정체를 안다. 잡으면 원래 모습으로 복원.
+ * 라운드 1은 평화롭게(조작 학습), 이후 라운드는 콘셉트가 허용한 모드 중 하나.
+ * `?event=id` 로 강제할 수 있다.
  */
-class AbstractEvent implements RoundEvent {
-  id = 'abstract';
-  title = '사물들이 이상해졌다!';
-  desc = '전부 밋밋한 도형이 됐다. 잡아봐야 정체를 안다!';
-  private active: Prop[] = [];
-
-  start(ctx: EventCtx) {
-    for (const prop of ctx.props.props) {
-      const stand = buildAbstractVisual(prop.meta);
-      ctx.world.scene.add(stand);
-      prop.abstract = stand;
-      prop.mesh.visible = false;
-      prop.cloaked = true; // 실루엣 판정 플래그 재사용
-      this.active.push(prop);
-    }
-  }
-
-  tick(ctx: EventCtx) {
-    for (const prop of this.active) {
-      if (prop.cloaked && prop.heldBy.size > 0) this.reveal(ctx, prop);
-    }
-  }
-
-  private reveal(ctx: EventCtx, prop: Prop) {
-    if (prop.abstract) {
-      ctx.world.scene.remove(prop.abstract);
-      prop.abstract = null;
-    }
-    prop.mesh.visible = true;
-    prop.cloaked = false;
-    sfx.reveal(70);
-  }
-
-  end(ctx: EventCtx) {
-    for (const prop of this.active) this.reveal(ctx, prop);
-    this.active = [];
-  }
-}
-
-/** 라운드 1은 평화롭게(조작 학습), 이후 라운드는 랜덤 이벤트. ?event=id 로 강제 가능 */
-export function pickEvent(round: number, rng: () => number = Math.random): RoundEvent | null {
-  const pool: () => RoundEvent[] = () =>
-    [slippery, moon, new WindEvent(), new MysteryEvent(), new AbstractEvent()];
+export function pickEvent(
+  round: number,
+  allowed: string[],
+  rng: () => number = Math.random,
+): RoundEvent | null {
   const forced = new URLSearchParams(location.search).get('event');
-  if (forced) return pool().find((e) => e.id === forced) ?? null;
-  if (round <= 1) return null;
-  const events = pool();
-  return events[Math.floor(rng() * events.length)];
+  if (forced) return FACTORIES[forced]?.() ?? null;
+  if (round <= 1 || allowed.length === 0) return null;
+  const id = allowed[Math.floor(rng() * allowed.length)];
+  return FACTORIES[id]?.() ?? null;
 }

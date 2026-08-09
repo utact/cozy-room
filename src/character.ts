@@ -1,5 +1,5 @@
 /**
- * 캐릭터 비주얼 — 생성형 3D 캐릭터(GLB) 또는 절차적 캡슐 폴백.
+ * 캐릭터 비주얼 — 생성형 3D 캐릭터(GLB).
  *
  * public/assets/characters/character.glb 는 tools/merge-character.mjs 가 Meshy 출력
  * 4개를 합쳐 만든 파일로, 30fps 클립 walk·pickup·throw·hit 을 담고 있다.
@@ -7,13 +7,14 @@
  * pickup 에서 구간 둘을 잘라 쓴다 — 뒷부분의 서 있는 동작이 idle, 쭈그려 집는
  * 부분이 grab 이다.
  *
- * GLB가 없거나 로드에 실패하면 절차적 캡슐로 폴백하므로 빌드는 항상 플레이 가능.
+ * GLB가 없거나 필수 클립이 빠지면 에러로 멈춘다. 폴백을 두면 화면에 실제로 무엇이
+ * 렌더링되는지 알 수 없어진다.
  */
 
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
-import { createProceduralPlayerVisual, type PlayerVisual } from './visuals';
+import type { PlayerVisual } from './visuals';
 
 const GLB_URL = 'assets/characters/character.glb';
 
@@ -116,19 +117,12 @@ export class CharacterLibrary {
   private clips = new Map<string, THREE.AnimationClip>();
 
   async load(): Promise<void> {
-    let gltf;
-    try {
-      gltf = await new GLTFLoader().loadAsync(GLB_URL);
-    } catch (err) {
-      console.warn('[character] GLB 로드 실패 — 절차적 캡슐로 폴백', err);
-      return;
-    }
+    const gltf = await new GLTFLoader().loadAsync(GLB_URL);
     const byName = new Map(gltf.animations.map((c) => [c.name, c]));
     const pickup = byName.get('pickup');
     const walk = byName.get('walk');
     if (!pickup || !walk) {
-      console.warn('[character] 필수 클립(walk/pickup)이 없어 절차적 캡슐로 폴백');
-      return;
+      throw new Error('[character] 필수 클립(walk/pickup)이 없다');
     }
     const sub = (src: THREE.AnimationClip, name: string, [from, to]: [number, number]) =>
       THREE.AnimationUtils.subclip(src, name, Math.round(from * FPS), Math.round(to * FPS), FPS);
@@ -152,7 +146,7 @@ export class CharacterLibrary {
     console.info(`[character] 캐릭터 GLB 로드 완료 — 클립 ${[...this.clips.keys()].join(', ')}`);
   }
 
-  /** 플레이어 한 명분 비주얼. GLB가 없으면 null (호출부가 절차적 폴백을 쓴다) */
+  /** 플레이어 한 명분 비주얼. 로드 전이면 null */
   create(color: number): PlayerVisual | null {
     if (!this.scene) return null;
     // 스킨드 메시는 clone(true) 로 복제하면 스켈레톤이 공유돼 둘이 똑같이 움직인다
@@ -406,7 +400,3 @@ class GlbPlayerVisual implements PlayerVisual {
   }
 }
 
-/** GLB가 없을 때 쓰는 폴백 — 기존 절차적 캡슐 */
-export function createFallbackVisual(color: number): PlayerVisual {
-  return createProceduralPlayerVisual(color);
-}

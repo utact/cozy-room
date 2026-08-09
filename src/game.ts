@@ -8,13 +8,14 @@ import { InputManager, keyName, type InputSource } from './input';
 import { UI } from './ui';
 import { LocalJudge, josa, matchPunchline, matchComment, type JudgeEntry } from './judge';
 import { pickTopics, type Topic } from './topics';
+import { pickConcepts, type Concept } from './themes';
 import { PROP_CATALOG, LOOKALIKES, type PropMeta } from './catalog';
 import { pickEvent, type EventCtx, type RoundEvent } from './events';
 import { AirshipSystem } from './airship';
 import { sfx } from './sound';
 import { BotSource } from './bot';
 import type { AssetLibrary } from './assets';
-import { CharacterLibrary, createFallbackVisual } from './character';
+import { CharacterLibrary } from './character';
 
 // ?fast — 개발·시연용 단축 라운드
 const FAST = new URLSearchParams(location.search).has('fast');
@@ -48,6 +49,8 @@ export class Game {
   private stateTime = 0;
   private round = 0;
   private topics: Topic[] = [];
+  /** 라운드별 콘셉트 — 라운드가 바뀌면 맵도 바뀐다 */
+  private concepts: Concept[] = [];
   private event: RoundEvent | null = null;
   private airship!: AirshipSystem;
   private lastBeepSec = -1;
@@ -60,8 +63,10 @@ export class Game {
   private reloading = false;
 
   constructor(container: HTMLElement, assets: AssetLibrary, private characters: CharacterLibrary) {
-    this.world = new World3D(container);
+    this.world = new World3D(container, assets);
     this.props = new PropManager(this.world, assets);
+    // 메뉴 화면에도 방이 보여야 하므로 첫 콘셉트를 미리 세워 둔다
+    this.applyConcept(pickConcepts(1)[0]);
     // 프롭 제거 시 잡고 있던 조인트부터 해제
     this.props.beforeDespawn = (prop) => {
       for (const id of [...prop.heldBy]) this.players[id]?.release();
@@ -101,6 +106,7 @@ export class Game {
         this.accumulator -= FIXED_DT;
       }
       this.world.updateCamera(dt);
+      this.world.updateScene(dt);
       this.world.render();
       requestAnimationFrame(loop);
     };
@@ -169,7 +175,8 @@ export class Game {
   private addPlayer(source: InputSource) {
     const id = this.players.length;
     const color = PLAYER_COLORS[id];
-    const visual = this.characters.create(color) ?? createFallbackVisual(color);
+    const visual = this.characters.create(color);
+    if (!visual) throw new Error('[game] 캐릭터 GLB가 없다 — 폴백은 두지 않는다');
     const player = new Player(id, source, this.world, this.props, SPAWNS[id], visual);
     this.players.push(player);
     this.playersByCollider.set(player.collider.handle, player);
@@ -177,7 +184,17 @@ export class Game {
 
   private beginMatch() {
     this.ui.hideMenu();
-    this.topics = pickTopics(ROUNDS);
+    this.concepts = pickConcepts(ROUNDS);
+    // 같은 콘셉트가 여러 라운드에 배정되면 그 안에서 서로 다른 질문을 뽑는다
+    const pools = new Map<Concept, Topic[]>();
+    this.topics = this.concepts.map((c) => {
+      let pool = pools.get(c);
+      if (!pool || pool.length === 0) {
+        pool = pickTopics(c.topics, c.topics.length);
+        pools.set(c, pool);
+      }
+      return pool.shift()!;
+    });
     this.round = 0;
     for (const p of this.players) p.score = 0;
     // 2인이면 라운드 하나(2~마지막)가 일치 라운드가 된다. ?match 로 전부 강제 가능
@@ -199,12 +216,19 @@ export class Game {
     };
   }
 
+  /** 콘셉트 하나를 방과 프롭에 동시에 반영한다 */
+  private applyConcept(concept: Concept) {
+    this.world.setConcept(concept);
+    this.props.setConcept(concept);
+  }
+
   private beginRound() {
     this.round++;
-    this.event = pickEvent(this.round);
+    const concept = this.concepts[this.round - 1] ?? this.world.concept;
+    this.applyConcept(concept);
+    this.event = pickEvent(this.round, concept.eventIds);
     this.lastBeepSec = -1;
     this.tugs.clear();
-    this.props.scatter();
     this.matchTarget =
       this.roundTypes[this.round - 1] === 'match' ? this.setupMatchRound() : null;
     this.players.forEach((p, i) => {
@@ -215,8 +239,8 @@ export class Game {
       ? `모두 【${this.matchTarget.name}】 들어라!`
       : this.currentTopic.text;
     const label = this.matchTarget
-      ? `${this.world.theme.name} · 하나 모자란다!`
-      : this.world.theme.name;
+      ? `${this.world.concept.name} · 하나 모자란다!`
+      : this.world.concept.name;
     this.ui.showTopic(this.round, ROUNDS, topicText, label);
     this.ui.setHud(this.hudEntries());
     this.setState('topic');
@@ -228,8 +252,9 @@ export class Game {
    * 상황이 성립한다(2인 기준). 닮은꼴 미끼도 이미 방에 하나씩 깔려 있다.
    */
   private setupMatchRound(): PropMeta | null {
-    const candidates = Object.keys(LOOKALIKES).filter((id) =>
-      PROP_CATALOG.some((m) => m.id === id),
+    const present = new Set(this.world.concept.propIds);
+    const candidates = Object.keys(LOOKALIKES).filter(
+      (id) => present.has(id) && PROP_CATALOG.some((m) => m.id === id),
     );
     if (candidates.length === 0) return null; // 조건 미달 → 일반 라운드로
     const targetId = candidates[Math.floor(Math.random() * candidates.length)];
@@ -245,7 +270,7 @@ export class Game {
     if (this.stateTime >= TOPIC_TIME) {
       this.setState('scramble');
       this.ui.minifyTopic();
-      this.airship.start();
+      if (this.world.concept.airship) this.airship.start();
       if (this.event) {
         this.event.start(this.eventCtx);
         this.ui.showEvent(this.event.title, this.event.desc);
@@ -256,7 +281,7 @@ export class Game {
   private tickScramble(dt: number) {
     this.tickGameplay(dt);
     this.event?.tick?.(this.eventCtx, dt);
-    this.airship.tick(dt, this.players);
+    if (this.world.concept.airship) this.airship.tick(dt, this.players);
     const remain = SCRAMBLE_TIME - this.stateTime;
     this.ui.setTimer(Math.max(0, remain));
     // 마지막 5초 카운트다운 비프
@@ -367,7 +392,7 @@ export class Game {
       this.event.end(this.eventCtx);
       this.event = null;
     }
-    this.airship.end();
+    if (this.world.concept.airship) this.airship.end();
     this.ui.hideEvent();
     this.ui.setTimer(null);
     this.ui.hideTopic();

@@ -4,24 +4,21 @@ import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 import { PROP_CATALOG, type PropMeta } from './catalog';
 import { ROOM_W, ROOM_D, type World3D } from './world';
-import { buildProceduralVisual } from './visuals';
 import type { AssetLibrary } from './assets';
+import type { Concept } from './themes';
 
 const THROWN_WINDOW = 1.6; // 이 시간 안에 상대를 맞히면 '뺏기' 성립 (초)
 
 let nextPropUid = 1;
 
 export class Prop {
-  /** 네트워크 동기화용 고유 id */
   readonly uid = nextPropUid++;
-  /** 미스터리 룸 — 실루엣 상태 */
+  /** 정전 모드 — 실루엣 상태. 한 번 잡으면 정체가 드러난다 */
   cloaked = false;
   thrownBy = -1; // 던진 플레이어 id (-1 = 없음)
   thrownTimer = 0;
   /** 현재 이 프롭을 잡고 있는 플레이어 id 집합 (동시 그랩 = 줄다리기) */
   heldBy = new Set<number>();
-  /** 추상화 모드 — 회색 프리미티브 스탠드인 (표시 중이면 mesh는 숨김) */
-  abstract: THREE.Object3D | null = null;
 
   constructor(
     public meta: PropMeta,
@@ -60,10 +57,20 @@ export class PropManager {
   /** 프롭 제거 전 훅 — 잡고 있는 플레이어의 조인트 해제용 (game이 설정) */
   beforeDespawn: (prop: Prop) => void = () => {};
 
-  constructor(private world: World3D, private assets: AssetLibrary, rng: () => number = Math.random) {
-    // 카탈로그 전체를 딱 하나씩. 같은 물건이 둘 이상이면 "주제에 가장 맞는 물건을
-    // 든 사람"을 가릴 수 없으므로 중복 스폰은 두지 않는다.
-    for (const meta of PROP_CATALOG) this.spawn(meta);
+  constructor(private world: World3D, private assets: AssetLibrary) {}
+
+  /**
+   * 콘셉트에 맞는 프롭만 깔아 놓는다. 라운드마다 맵이 바뀌므로 매번 다시 깐다.
+   * 같은 물건이 둘 이상이면 "주제에 가장 맞는 물건을 든 사람"을 가릴 수 없으므로
+   * 종류마다 딱 하나씩만 스폰한다.
+   */
+  setConcept(concept: Concept, rng: () => number = Math.random) {
+    for (const prop of [...this.props]) this.despawn(prop);
+    for (const id of concept.propIds) {
+      const meta = PROP_CATALOG.find((m) => m.id === id);
+      if (!meta) throw new Error(`[objects] 카탈로그에 없는 프롭 id: ${id}`);
+      this.spawn(meta);
+    }
     this.scatter(rng);
   }
 
@@ -75,8 +82,7 @@ export class PropManager {
         .setAngularDamping(0.4),
     );
     const collider = this.world.physics.createCollider(buildColliderDesc(meta), body);
-    // 생성형 3D GLB가 있으면 사용, 없으면 절차적 비주얼
-    const mesh = this.assets.instantiate(meta) ?? buildProceduralVisual(meta);
+    const mesh = this.assets.instantiate(meta);
     this.world.scene.add(mesh);
     const prop = new Prop(meta, body, collider, mesh);
     this.props.push(prop);
@@ -84,11 +90,26 @@ export class PropManager {
     return prop;
   }
 
+  /**
+   * 착지 지점이 가구 발자국이나 그 그림자 띠 안이면 다시 뽑는다.
+   * 공중에서 떨어뜨리는 방식이라 낙하 시작점의 x·z가 곧 착지 지점이다.
+   * 여기서 걸러야 "가구 뒤에 가려 보이지 않는 프롭"이 원천적으로 생기지 않는다.
+   */
   private placeRandom(prop: Prop, rng: () => number) {
-    const x = (rng() - 0.5) * (ROOM_W - 3);
-    const z = (rng() - 0.5) * (ROOM_D - 3);
-    const y = 0.8 + rng() * 2.2;
-    prop.body.setTranslation({ x, y, z }, true);
+    const margin = Math.max(...prop.meta.size) / 2 + 0.15;
+    let x = 0;
+    let z = 0;
+    for (let attempt = 0; attempt < 40; attempt++) {
+      x = (rng() - 0.5) * (ROOM_W - 3);
+      z = (rng() - 0.5) * (ROOM_D - 3);
+      const blocked = this.world.footprints.some(
+        (f) =>
+          x > f.minX - margin && x < f.maxX + margin &&
+          z > f.minZ - margin && z < f.maxZ + margin,
+      );
+      if (!blocked) break;
+    }
+    prop.body.setTranslation({ x, y: 0.8 + rng() * 2.2, z }, true);
     prop.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
     prop.body.setAngvel({ x: rng() * 2, y: rng() * 4, z: rng() * 2 }, true);
   }
@@ -98,7 +119,6 @@ export class PropManager {
     this.byCollider.delete(prop.collider.handle);
     this.props = this.props.filter((p) => p !== prop);
     this.world.scene.remove(prop.mesh);
-    if (prop.abstract) this.world.scene.remove(prop.abstract);
     this.world.physics.removeRigidBody(prop.body);
   }
 
@@ -127,10 +147,7 @@ export class PropManager {
     return best;
   }
 
-  private time = 0;
-
   update(dt: number) {
-    this.time += dt;
     for (const prop of this.props) {
       if (prop.thrownTimer > 0) {
         prop.thrownTimer -= dt;
@@ -141,11 +158,6 @@ export class PropManager {
       const r = prop.body.rotation();
       prop.mesh.position.set(t.x, t.y, t.z);
       prop.mesh.quaternion.set(r.x, r.y, r.z, r.w);
-      // 추상화 스탠드인도 같은 트랜스폼 추종
-      if (prop.abstract) {
-        prop.abstract.position.set(t.x, t.y, t.z);
-        prop.abstract.quaternion.set(r.x, r.y, r.z, r.w);
-      }
     }
   }
 
