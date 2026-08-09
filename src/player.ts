@@ -14,9 +14,14 @@ import { sfx } from './sound';
 const MOVE_SPEED = 4.6;
 const YAW_GAIN = 11;
 const HAND_LOCAL = { x: 0, y: 0.15, z: 0.62 }; // 몸 기준 손 위치 (앞)
+/** 프롭 기본 각감쇠 — objects.ts의 RigidBodyDesc와 같은 값이어야 놓았을 때 원상복구된다 */
+const PROP_ANGULAR_DAMPING = 0.4;
+/** 들고 있는 동안의 각감쇠 — 흔들림은 남기되 계속 도는 건 막는다 */
+const HELD_ANGULAR_DAMPING = 12;
 
-export const PLAYER_COLORS = [0xe4573d, 0x3d7de4];
-export const PLAYER_NAMES = ['1P', '2P'];
+// 1P/2P는 키보드 참가, 3P/4P는 AI 전용 슬롯 (game.ts의 addBot 참고)
+export const PLAYER_COLORS = [0xe4573d, 0x3d7de4, 0xe4b53d, 0x4fbf5e];
+export const PLAYER_NAMES = ['1P', '2P', '3P', '4P'];
 
 export class Player {
   body: RAPIER.RigidBody;
@@ -31,8 +36,6 @@ export class Player {
   slippery = false;
   /** 직전 프레임 이동 입력 크기 — 줄다리기 힘 계산용 */
   lastMoveMag = 0;
-  private jumpBuffer = 0;
-  private coyote = 0;
   /** 현재 잡기 후보 프롭 위치 (네트워크 동기화용) */
   indicatorPos: { x: number; z: number } | null = null;
   /** 잡기 가능한 프롭 아래 표시되는 링 */
@@ -102,7 +105,7 @@ export class Player {
 
   update(dt: number) {
     const input: InputState = this.frozen
-      ? { moveX: 0, moveZ: 0, actionPressed: false, actionHeld: false, jumpPressed: false }
+      ? { moveX: 0, moveZ: 0, actionPressed: false, actionHeld: false }
       : this.source.getState();
 
     // 이동 — 현재 속도를 목표 속도로 서서히 블렌드 (밀침·넉백이 살아있도록)
@@ -118,18 +121,6 @@ export class Player {
       { x: lv.x + (tx - lv.x) * blend, y: lv.y, z: lv.z + (tz - lv.z) * blend },
       true,
     );
-
-    // 점프 — 입력 버퍼(착지 직전 입력 허용) + 코요테 타임(모서리 이탈 직후 허용)
-    if (input.jumpPressed) this.jumpBuffer = 0.15;
-    else this.jumpBuffer = Math.max(0, this.jumpBuffer - dt);
-    this.coyote = this.isGrounded() ? 0.1 : Math.max(0, this.coyote - dt);
-    if (this.jumpBuffer > 0 && this.coyote > 0) {
-      this.jumpBuffer = 0;
-      this.coyote = 0;
-      const v = this.body.linvel();
-      this.body.setLinvel({ x: v.x, y: 5.4, z: v.z }, true);
-      sfx.jump();
-    }
 
     // 조향 — 입력 방향으로 y축 회전 (P 제어)
     if (Math.abs(input.moveX) > 0.01 || Math.abs(input.moveZ) > 0.01) {
@@ -172,14 +163,6 @@ export class Player {
     }
   }
 
-  /** 발밑 0.9m 안에 뭔가 있으면 접지로 간주 (가구·프롭 위 포함) */
-  private isGrounded(): boolean {
-    const t = this.body.translation();
-    const ray = new RAPIER.Ray({ x: t.x, y: t.y, z: t.z }, { x: 0, y: -1, z: 0 });
-    const hit = this.world.physics.castRay(ray, 0.9, true, undefined, undefined, this.collider, this.body);
-    return hit !== null;
-  }
-
   /** 지금 잡을 수 있는 대상 */
   private findCandidate(): Prop | null {
     return this.propMgr.findGrabbable(this.handWorld, this.id);
@@ -195,6 +178,11 @@ export class Player {
       { x: 0, y: 0, z: 0 },
     );
     this.joint = this.world.physics.createImpulseJoint(params, this.body, prop.body, true);
+    // 스페리컬 조인트는 위치만 묶고 회전은 자유라, 그대로 두면 든 물건이 프로펠러처럼
+    // 계속 돈다. 뭘 들었는지 읽혀야 뺏을지 말지 판단하고 심사도 납득되므로, 들고 있는
+    // 동안만 회전을 강하게 감쇠해 흔들리다 멈추게 한다 (놓으면 원래대로 복구 → 던질 때
+    // 회전은 그대로 살아 있다)
+    prop.body.setAngularDamping(HELD_ANGULAR_DAMPING);
     prop.heldBy.add(this.id);
     this.held = prop;
   }
@@ -220,6 +208,7 @@ export class Player {
       this.joint = null;
     }
     if (this.held) {
+      this.held.body.setAngularDamping(PROP_ANGULAR_DAMPING); // 잡기 전 상태로 복구
       this.held.heldBy.delete(this.id);
       this.held = null;
     }

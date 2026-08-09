@@ -12,7 +12,7 @@ import type { InputSource, InputState } from './input';
 import type { Player } from './player';
 import type { Prop, PropManager } from './objects';
 
-const IDLE: InputState = { moveX: 0, moveZ: 0, actionPressed: false, actionHeld: false, jumpPressed: false };
+const IDLE: InputState = { moveX: 0, moveZ: 0, actionPressed: false, actionHeld: false };
 const DT = 1 / 60; // getState는 고정 스텝 틱마다 1회 호출된다
 
 export class BotSource implements InputSource {
@@ -28,9 +28,7 @@ export class BotSource implements InputSource {
   private holdTimer = 0;
   private patience: number;
   private wander = new THREE.Vector3();
-  private jumpCooldown = 0;
   private prevAction = false;
-  private prevJump = false;
 
   constructor(index: number) {
     this.id = `bot${index}`;
@@ -47,12 +45,10 @@ export class BotSource implements InputSource {
   getState(): InputState {
     if (!this.self || !this.props) return IDLE;
     this.repickTimer -= DT;
-    this.jumpCooldown -= DT;
 
     const me = this.self.position;
     let dest: THREE.Vector3 | null = null;
     let action = false;
-    let jump = false;
 
     if (this.self.held) {
       // 들고 있음 — 인내심이 다하면 가장 가까운 상대에게 투척
@@ -83,11 +79,6 @@ export class BotSource implements InputSource {
         dest = this.targetProp.position;
         const d = dest.distanceTo(me);
         if (d < 0.95) action = true;
-        // 테이블 위 프롭이면 점프
-        if (dest.y > 0.6 && d < 1.7 && this.jumpCooldown <= 0) {
-          jump = true;
-          this.jumpCooldown = 1.3;
-        }
       }
     }
 
@@ -104,9 +95,7 @@ export class BotSource implements InputSource {
     }
     const actionPressed = action && !this.prevAction;
     this.prevAction = action;
-    const jumpPressed = jump && !this.prevJump;
-    this.prevJump = jump;
-    return { moveX, moveZ, actionPressed, actionHeld: action, jumpPressed };
+    return { moveX, moveZ, actionPressed, actionHeld: action };
   }
 
   private nearestFoe(me: THREE.Vector3): Player | null {
