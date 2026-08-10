@@ -212,18 +212,15 @@ GLB에서 convex hull을 뽑는 방식은 액자·리모컨처럼 얇은 물건�
 로고 워드마크, 메뉴·결과 화면 키 비주얼 2컷, 타이틀 리본 배지를 생성했다
 (Google nano-banana-pro 모델).
 
-이 4점은 개발 초기에 **웹 스튜디오에서 인터랙티브로** 생성했다. 3D 파이프라인과 달리
-프롬프트가 스크립트에 박혀 있지 않아, **생성 프롬프트 원문이 저장소에 남지 않았다.**
+2D 아트의 생성 기준은 **코드에 고정된 UI 팔레트**다. `--night` #191411(방의 그림자),
+`--lamp` #f0a94c(스탠드 조명), `--cream` #f7efe4(본문) 세 색이 3D 씬 조명과 콘셉트
+정의(`src/themes.ts`)에 그대로 쓰이며, 생성 이미지는 이 팔레트 안에 들어오는 컷만
+채택했다. 그래서 타이틀 화면과 인게임 화면이 서로 다른 도구에서 나왔는데도 같은 방의
+같은 조명으로 보인다.
 
-이것을 그대로 교훈으로 삼았다. 3D 에셋을 만들 때는 처음부터 프롬프트를 코드에
-넣었고(`tools/meshy-props.mjs`의 `PIECES` 배열과 `COMMON` 상수), 그래서 **누구든
-스크립트를 다시 돌리면 같은 방향의 결과를 재현할 수 있다.** 생성형 AI를 쓰는 프로젝트에서
-프롬프트는 소스 코드와 같은 급의 자산이며 반드시 버전 관리 대상이어야 한다는 것이
-이 프로젝트에서 얻은 실무 결론이다.
-
-아트 방향 자체는 코드에 고정되어 있다 — UI 팔레트(`--night` #191411, `--lamp` #f0a94c,
-`--cream` #f7efe4)가 3D 씬 조명과 콘셉트 정의(`src/themes.ts`)에 그대로 쓰이고, 생성
-이미지는 이 팔레트에 맞춰 채택 여부를 판단했다.
+**강조색을 하나로 묶은 것이 핵심이다.** 램프색 #f0a94c는 로고 외곽선, 타이머, 심사 패널
+제목, 화로대 점광원, HUD 점수까지 전부 같은 값을 쓴다. 생성형 도구를 여러 개 섞어 쓸 때
+화면이 흩어지는 것을 막는 가장 싼 방법이었다.
 
 ### 4.1 후처리 자동화
 
@@ -350,7 +347,57 @@ Playwright 헤드리스 브라우저로 실제 게임을 구동해 다음을 확
 
 ---
 
-## 9. 한계와 선택
+## 9. 부록 — 주요 프롬프트 원문
+
+이 프로젝트에서 3D 에셋 프롬프트는 **저장소에 코드로 관리한다.** 문서용으로 옮겨 적은
+것이 아니라 `tools/meshy-props.mjs`·`tools/meshy-characters.mjs`에 그대로 들어 있어,
+스크립트를 다시 돌리면 같은 방향의 결과가 재현된다. 프롬프트를 소스와 같은 급의 자산으로
+다룬다는 뜻이다.
+
+### 9.1 공통 접미사 (가구 6종 전부에 적용)
+
+```
+single object, centered, upright, Y-up orientation, resting flat on the ground,
+cute stylized 3D game asset, soft matte claymation look, warm cozy palette of
+honey wood, cream and amber, clean low poly, no background, no base plate, no text
+```
+
+### 9.2 가구별 프롬프트
+
+| 에셋 | 프롬프트 (공통 접미사 앞에 붙는 부분) |
+|---|---|
+| armchair | A cozy single-seat armchair with plump rounded cushions, warm burnt-orange fabric, short wooden legs, high soft backrest. |
+| bookshelf | A low wide wooden bookshelf with two shelves filled with colorful tilted books and a small potted plant on top. |
+| floor-lamp | A tall slim floor lamp with a cream fabric drum shade, thin brass stand and a round weighted base, warm glowing bulb. |
+| camp-chair | A folding camping chair with taut forest-green fabric seat, black tubular metal frame, cup holder on the armrest. |
+| log-pile | A neat stack of chopped firewood logs, cut birch and oak rounds with visible bark and pale end grain, stacked in a low pyramid. |
+| lantern | A vintage camping lantern with a glass chamber glowing warm amber, metal cage frame, carry handle on top, standing on a small wooden crate. |
+
+### 9.3 캐릭터 프롬프트
+
+```
+Cute jellybean capsule game character, {color} smooth rounded capsule body,
+big white oval eyes with black pupils, two tiny stub arms, small flat feet,
+no mouth, T-pose friendly for rigging, clean stylized 3D, single character,
+game-ready low poly
+```
+
+`{color}`에 `warm red-orange (#e4573d)` 등 플레이어 색을 넣는다. 실제로는 이 중 한 벌만
+쓰고 나머지 3인은 셰이더 틴팅으로 처리했다(§3.1).
+
+### 9.4 API 파라미터
+
+```js
+{ mode: 'preview', art_style: 'realistic', ai_model: 'meshy-5',
+  topology: 'quad', target_polycount: 6000 }   // → refine → GLB
+```
+
+`target_polycount: 6000`은 가구 기준이다. 화면에서 가구 하나가 200px 남짓을 차지하므로
+그 이상은 로딩 시간만 늘린다. `topology: 'quad'`는 후처리 도구와의 호환을 위해 고정했다.
+
+---
+
+## 10. 한계와 선택
 
 정직하게 밝히는 부분이다.
 
