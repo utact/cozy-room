@@ -335,7 +335,15 @@ export class Game {
       }
       let tug = this.tugs.get(prop);
       if (!tug) {
-        tug = { time: 0, limit: 1.3 + Math.random() * 1.2, effort: [0, 0] };
+        // 슬롯은 반드시 인원수만큼. [0, 0] 두 칸으로 두면 3P·4P가 줄다리기에 끼는 순간
+        // effort[2]가 undefined가 되고, undefined + n = NaN → Math.max가 NaN →
+        // indexOf(NaN)이 -1 → holders[-1]이 undefined가 된다. 그러면 승자와 일치하는
+        // 사람이 아무도 없어 **양쪽 다 물건을 놓치고** 안내에도 "undefined"가 찍힌다.
+        tug = {
+          time: 0,
+          limit: 1.3 + Math.random() * 1.2,
+          effort: new Array(this.players.length).fill(0),
+        };
         this.tugs.set(prop, tug);
       }
       tug.time += dt;
@@ -345,7 +353,7 @@ export class Game {
       if (tug.time < tug.limit) continue;
       const holders = [...prop.heldBy];
       const rolls = holders.map((id) => tug.effort[id] * (0.85 + Math.random() * 0.3));
-      const winner = holders[rolls.indexOf(Math.max(...rolls))];
+      const winner = holders[rolls.indexOf(Math.max(...rolls))] ?? holders[0];
       let stolen = false;
       for (const id of holders) {
         if (id === winner) continue;
