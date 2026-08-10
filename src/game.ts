@@ -19,8 +19,10 @@ import { CharacterLibrary } from './character';
 
 // ?fast — 개발·시연용 단축 라운드
 const FAST = new URLSearchParams(location.search).has('fast');
-const TOPIC_TIME = FAST ? 1.5 : 3.5;
-const SCRAMBLE_TIME = FAST ? 6 : 25;
+// 25초는 방이 16×12이던 시절의 값이다. 방을 13×9.5로 좁히고 프롭을 22개로 늘린 뒤로는
+// 10초면 원하는 물건에 닿고, 남은 시간이 서로 눈치만 보는 공백이 됐다. 절반으로 줄인다.
+const TOPIC_TIME = FAST ? 1.5 : 2.5;
+const SCRAMBLE_TIME = FAST ? 6 : 12;
 const ROUNDS = 3;
 const FIXED_DT = 1 / 60;
 
@@ -309,7 +311,8 @@ export class Game {
     this.ui.setTimer(Math.max(0, remain));
     // 마지막 5초 카운트다운 비프
     const sec = Math.ceil(remain);
-    if (sec <= 5 && sec >= 1 && sec !== this.lastBeepSec) {
+    // 12초 라운드에서 5초를 카운트다운하면 라운드의 절반이 비프음이다
+    if (sec <= 3 && sec >= 1 && sec !== this.lastBeepSec) {
       this.lastBeepSec = sec;
       sfx.tick();
     }
@@ -454,7 +457,7 @@ export class Game {
       await this.revealVerdicts(entries, result.verdicts);
     }
 
-    await delay(2800);
+    await delay(1900);
     this.ui.hideJudgePanel();
     for (const p of this.players) p.release();
 
@@ -469,7 +472,7 @@ export class Game {
   ) {
     const sorted = [...verdicts].sort((a, b) => a.score - b.score);
     for (const v of sorted) {
-      await delay(1100);
+      await delay(750);
       const p = this.players[v.playerId];
       const entry = entries.find((e) => e.playerId === v.playerId)!;
       p.score += v.score;
@@ -493,22 +496,22 @@ export class Game {
     const star = [...losers].sort((a, b) => rank(a) - rank(b))[0] ?? null;
 
     if (star) {
-      await delay(600);
+      await delay(450);
       const p = this.players[star.playerId];
       this.world.focusOn(p.position);
       sfx.drumroll();
       this.ui.showTada('잠깐', '한 명이 다른 걸 들고 있습니다.');
-      await delay(2000);
+      await delay(1400);
       sfx.tada();
       const isLook = !!star.item && (LOOKALIKES[target.id] ?? []).includes(star.item.id);
       this.ui.showTada(
         `${PLAYER_NAMES[star.playerId]} 선수`,
         matchPunchline(PLAYER_NAMES[star.playerId], target.name, star.item?.name ?? null, isLook),
       );
-      await delay(3400);
+      await delay(2400);
       this.ui.hideTada();
       this.world.resetFocus();
-      await delay(700);
+      await delay(500);
     }
 
     this.ui.showJudgePanel(`모두 ${josa(target.name, '을를')} 들어라!`);

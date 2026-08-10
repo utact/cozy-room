@@ -288,8 +288,8 @@ class RaccoonEvent implements RoundEvent {
     ctx.world.scene.add(this.mesh);
 
     this.phase = 'wait';
-    // 첫 등장은 빨리 — 25초 라운드에서 5초쯤 기다리면 절반이 지나간다
-    this.timer = 1.2 + Math.random() * 1.2;
+    // 라운드가 12초다. 등장이 늦으면 한 번도 못 보고 끝나므로 거의 바로 튀어나온다
+    this.timer = 0.5 + Math.random() * 0.5;
     this.target = null;
     this.carrying = null;
   }
@@ -357,16 +357,16 @@ class RaccoonEvent implements RoundEvent {
       this.target = null;
       mesh.visible = false;
       this.phase = 'wait';
-      // 굴로 돌아간 뒤 다시 나오기까지 — 예전 4~7초는 라운드당 두세 번이 한계였다.
-      // 바닥에 프롭이 22개 깔리므로 하나씩 물어가도 판이 비지 않는다
-      this.timer = 1.8 + Math.random() * 1.6;
+      // 굴로 돌아간 뒤 다시 나오기까지. 바닥에 프롭이 22개 깔려 있어 하나씩 물어가도
+      // 판이 비지 않으므로, 12초 라운드 내내 쉬지 않고 들락거리게 둔다
+      this.timer = 0.6 + Math.random() * 0.6;
     }
   }
 
   private beginApproach(ctx: EventCtx) {
     const free = ctx.props.props.filter((p) => p.heldBy.size === 0 && p.thrownBy < 0);
     if (free.length === 0) {
-      this.timer = 1.5; // 노릴 게 없다 — 잠시 뒤 다시 본다
+      this.timer = 0.4; // 노릴 게 없다 — 곧바로 다시 본다
       return;
     }
     this.target = free[Math.floor(Math.random() * free.length)];

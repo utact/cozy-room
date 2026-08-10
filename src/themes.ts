@@ -189,7 +189,9 @@ const CAMPING: Concept = {
     'broom', 'vacuum', 'speaker', 'monstera',
     'blanket', 'cushion', 'tv-remote', 'headphones',
   ],
-  eventIds: ['raccoon', 'rain'],
+  // 중복 표기가 곧 가중치다 (pickEvent가 배열에서 균등 추첨하므로). 너구리는 화면에
+  // 실물이 뛰어다녀 무슨 일이 벌어지는지 즉시 읽히는 유일한 모드라 비중을 키운다
+  eventIds: ['raccoon', 'raccoon', 'rain'],
   airship: false,
 };
 
