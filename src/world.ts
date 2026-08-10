@@ -5,8 +5,11 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import type { Concept } from './themes';
 import type { AssetLibrary } from './assets';
 
-export const ROOM_W = 16; // x
-export const ROOM_D = 12; // z
+// 방 크기 — 예전 16×12는 캐릭터(키 1.52, 지름 0.68) 기준으로 너무 넓었다. 프롭 12개가
+// 192㎡에 흩어지니 서로 마주칠 일이 없어 난투가 성립하지 않았고, 그 넓이를 다 담느라
+// 카메라가 멀어져 프롭이 화면에서 30px까지 작아졌다. 좁히면 두 문제가 같이 풀린다.
+export const ROOM_W = 13; // x
+export const ROOM_D = 9.5; // z
 const WALL_VISIBLE_H = 1.4;
 const WALL_PHYS_H = 6; // 보이지 않는 높은 벽으로 물건 이탈 방지
 const WALL_T = 0.25;
@@ -35,8 +38,10 @@ export class World3D {
   private sun!: THREE.DirectionalLight;
   private warm!: THREE.PointLight;
   private spot!: THREE.SpotLight;
-  private readonly homePos = new THREE.Vector3(0, 13.5, 12.5);
-  private readonly homeLook = new THREE.Vector3(0, 0, -0.5);
+  // 방을 좁힌 만큼 카메라도 당긴다. 예전 (0,13.5,12.5)는 화면 위아래로 각각 20%씩
+  // 검은 여백을 남기면서 정작 프롭은 알아볼 수 없게 만들었다
+  private readonly homePos = new THREE.Vector3(0, 9.6, 8.9);
+  private readonly homeLook = new THREE.Vector3(0, 0, -0.4);
   private posTarget = this.homePos.clone();
   private lookTarget = this.homeLook.clone();
   private lookCur = this.homeLook.clone();

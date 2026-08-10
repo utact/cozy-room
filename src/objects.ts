@@ -64,14 +64,43 @@ export class PropManager {
    * 같은 물건이 둘 이상이면 "주제에 가장 맞는 물건을 든 사람"을 가릴 수 없으므로
    * 종류마다 딱 하나씩만 스폰한다.
    */
+  /**
+   * 바닥에 깔 프롭 총 개수.
+   *
+   * 종류는 12가지지만 12개만 깔면 13×9.5 바닥이 휑하다. 물건을 주우러 가는 동선이
+   * 서로 겹치지 않아 부딪힐 일이 없고, 그러면 물리 난투가 성립하지 않는다.
+   * 종류를 넘는 만큼은 이미 있는 것을 한 번 더 깐다 — 같은 물건이 둘이면 두 사람이
+   * 같은 답을 낼 수 있는데, 그건 점수가 같아질 뿐이라 심사가 깨지지 않는다.
+   */
+  private static readonly FLOOR_COUNT = 22;
+
   setConcept(concept: Concept, rng: () => number = Math.random) {
     for (const prop of [...this.props]) this.despawn(prop);
-    for (const id of concept.propIds) {
+    const metas = concept.propIds.map((id) => {
       const meta = PROP_CATALOG.find((m) => m.id === id);
       if (!meta) throw new Error(`[objects] 카탈로그에 없는 프롭 id: ${id}`);
-      this.spawn(meta);
+      return meta;
+    });
+    for (const meta of metas) this.spawn(meta);
+    // 정원까지 채우는 여벌 — 종류를 골고루 돌려 한 물건만 바닥에 널리지 않게 한다
+    for (let i = 0; metas.length + i < PropManager.FLOOR_COUNT; i++) {
+      this.spawn(metas[i % metas.length]);
     }
     this.scatter(rng);
+  }
+
+  /**
+   * 같은 프롭을 여러 개 더 깔아 놓는다 (일치 라운드 전용).
+   *
+   * 평소에는 종류마다 딱 하나씩만 두지만, 일치 라운드는 "N명이 N-1개를 두고 다툰다"가
+   * 규칙이라 목표 프롭만 인원수-1개가 있어야 한다. 하나만 두면 나머지 전원이 구조적으로
+   * 실패해 라운드가 성립하지 않는다.
+   */
+  addCopies(meta: PropMeta, count: number, rng: () => number = Math.random) {
+    for (let i = 0; i < count; i++) {
+      const prop = this.spawn(meta);
+      this.placeRandom(prop, rng);
+    }
   }
 
   private spawn(meta: PropMeta): Prop {

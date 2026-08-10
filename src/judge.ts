@@ -8,6 +8,7 @@
 
 import type { PropMeta } from './catalog';
 import type { Topic } from './topics';
+import { verdictLine } from './verdicts';
 
 export interface JudgeEntry {
   playerId: number;
@@ -33,35 +34,36 @@ export interface JudgeResult {
 // ─────────────────────────────────────────────────────────────
 // LocalJudge
 
+/**
+ * 점수대별 폴백 문장.
+ *
+ * 실제 심사평은 verdicts.ts 의 질문×물건 전용 문장이 담당한다. 여기 있는 것은 표에
+ * 칸이 없을 때(새 프롭·새 질문을 추가했는데 문장을 아직 안 쓴 경우)만 쓰인다.
+ * 그래서 일부러 물건 이름에 기대지 않는, 짧고 안전한 문장으로 둔다.
+ */
 const HIGH_TEMPLATES = [
-  '{item}?! 이건 심사할 필요도 없다. 만점에 가까운 선택!',
-  '{name} 선수, {item}을(를) 고르다니… 오늘 밤 주인공은 당신이다.',
-  '{item}이라니, 이 주제를 위해 태어난 물건 아닌가?',
-  '심사위원 만장일치. {item}은(는) 정답 그 자체.',
-  '{item}… 소름 돋았다. 이게 바로 프로의 선택.',
+  '{item}. 이 주제에 이보다 나은 답은 없다.',
+  '{name} 선수, {item}. 고민한 티가 난다.',
+  '{item}. 반박할 구석을 못 찾겠다.',
 ];
 
 const MID_TEMPLATES = [
-  '{item}… 나쁘지 않다. 하지만 세상을 바꾸진 못한다.',
-  '{name} 선수의 {item}, 무난하다. 무난함이 죄는 아니지.',
-  '{item}? 음… 60점짜리 인생을 보는 것 같다.',
-  '{item}을(를) 골랐다는 건 알겠는데, 왜 골랐는지는 모르겠다.',
-  '{item}, 절반의 성공. 나머지 절반은 어디에…?',
+  '{item}. 나쁘진 않은데 결정적이지도 않다.',
+  '{name} 선수의 {item}, 무난하다. 무난함이 죄는 아니고.',
+  '{item}. 왜 골랐는지는 알겠는데, 그게 최선이었나.',
 ];
 
 const LOW_TEMPLATES = [
-  '{item}…? 진심인가? 심사위원 일동 침묵.',
-  '{name} 선수, {item}은(는) 좀… 다시 생각해 보자.',
-  '이 주제에 {item}을(를) 내밀다니, 용기 하나는 인정한다.',
-  '{item}. 오답도 이렇게 당당하면 반칙이다.',
-  '{item}을(를) 보고 심사위원이 한숨을 쉬었다. 아주 길게.',
+  '{item}. 이 주제에 이걸 내미는 건 좀.',
+  '{name} 선수, {item}은(는) 다시 생각해 보자.',
+  '{item}. 오답인데 당당해서 더 할 말이 없다.',
 ];
 
 const EMPTY_TEMPLATES = [
-  '빈손?! {name} 선수, 물건 쟁탈전에서 물건을 안 들고 왔다…',
-  '{name} 선수의 제출물: 공기. 신선하긴 한데 점수는 못 준다.',
-  '빈손으로 온 {name} 선수, 미니멀리즘도 정도가 있다.',
-  '{name} 선수, 손이 예쁘긴 한데 심사 대상은 아니다.',
+  '{name} 선수, 제출물 없음. 물건 쟁탈전에서 물건을 못 구해 왔다.',
+  '{name} 선수의 제출물은 공기다. 신선하긴 한데 채점표에 칸이 없다.',
+  '{name} 선수, 25초 동안 대체 뭘 하다 오셨나.',
+  '빈손. 두 손 다 비었다. 이건 전략이 아니라 사고다.',
 ];
 
 /**
@@ -97,14 +99,26 @@ const TAG_QUIPS: Record<string, string> = {
 };
 
 const WINNER_TEMPLATES = [
-  '오늘의 우승자는 {name}! 물건 보는 눈이 남다르다.',
-  '{name} 선수 우승! 코지 룸의 지배자가 탄생했다.',
-  '최종 우승 {name}! 나머지는… 내일 다시 오자.',
-  '{name} 선수, 우승 축하한다. 그 손버릇은 계속 유지하길.',
+  '우승 {name}. 물건 보는 눈이 남다르다.',
+  '{name} 선수 우승. 오늘 이 방의 주인이다.',
+  '최종 우승 {name}. 나머지 분들은 내일 다시 오시라.',
+  '{name} 선수 우승. 그 손버릇은 계속 유지하시길.',
 ];
 
 function pick<T>(arr: T[], rng: () => number): T {
   return arr[Math.floor(rng() * arr.length)];
+}
+
+/**
+ * 주제 대비 프롭 점수 (0~100).
+ *
+ * 봇도 이 함수를 쓴다 — 심사 기준과 봇의 목표가 같은 함수에서 나와야 "봇이 좋은 걸
+ * 골랐는데 낮은 점수를 받는" 모순이 생기지 않는다. 그래서 변덕(rng)은 분리해 둔다.
+ */
+export function scoreProp(topic: Topic, item: PropMeta): number {
+  let score = 30; // 기본점 — 일단 뭐라도 들고 왔으면 성의 점수
+  for (const tag of item.tags) score += topic.tagWeights[tag] ?? 0;
+  return Math.max(0, Math.min(100, score));
 }
 
 /** 받침 유무에 따른 조사 선택 — "곰인형을" / "프라이팬을" / "고무오리를" */
@@ -132,9 +146,9 @@ const PUNCH_WRONG = [
   '{actual}… 그건 누가 봐도 {actual}입니다, {name} 선수.',
 ];
 const PUNCH_EMPTY = [
-  '{name} 선수, 손이 텅 비었습니다. 박수 부탁드립니다.',
-  '모두가 하나씩 들 때, {name} 선수는 아무것도 잡지 못했습니다.',
-  '오늘의 주인공은 빈손의 {name} 선수입니다. 따란~',
+  '{name} 선수, 두 손이 텅 비었습니다. 박수 부탁드립니다.',
+  '모두가 하나씩 집을 때, {name} 선수만 아무것도 못 잡았습니다.',
+  '{name} 선수, 뭐라도 들었어야죠. 뭐라도.',
 ];
 
 /** 받침 유무에 따라 '였습니다/이었습니다' 앞부분 생성 */
@@ -165,20 +179,45 @@ export function matchPunchline(
 }
 
 const MATCH_CORRECT_COMMENTS = [
-  '완벽한 일치. 통과!',
-  '정확하다. 눈썰미 인정.',
-  '군말 없이 정답.',
-  '이 정도면 프로 감정사.',
+  '정확히 그거다. 통과.',
+  '눈썰미 인정. 군말 없이 정답.',
+  '헷갈릴 만한데 안 헷갈렸다.',
+  '이 정도면 감정사 자격증 줘도 된다.',
 ];
 const MATCH_WRONG_COMMENTS = [
-  '오늘의 주인공… 다시 보게 됐다.',
-  '자신감 하나는 만점이었다.',
-  '실루엣 감정 능력 재교육 필요.',
-  '빈손도 패션이라면 할 말 없다.',
+  '자신감은 만점이었다. 물건이 틀렸을 뿐.',
+  '실루엣만 보고 뛰어들면 이렇게 된다.',
+  '비슷하게 생겼다는 건 인정한다. 그래도 틀렸다.',
+  '한 번 더 보고 집었어야 했다.',
 ];
 
-export function matchComment(correct: boolean, rng: () => number = Math.random): string {
-  return pick(correct ? MATCH_CORRECT_COMMENTS : MATCH_WRONG_COMMENTS, rng);
+const MATCH_EMPTY_COMMENTS = [
+  '아무것도 못 들었다. 틀린 것보다 나쁘다.',
+  '하나가 모자랐고, 그 하나가 이 선수였다.',
+  '남는 게 있었는데 손이 안 닿았다.',
+  '빈손. 고를 기회조차 못 잡았다.',
+];
+
+/**
+ * 일치 라운드 한 줄 평.
+ *
+ * 빈손을 "물건이 틀렸을 뿐" 같은 문장으로 평하면 안 된다 — 들지도 않은 사람에게
+ * 뭘 들었는지 얘기하는 게 되어 심사가 화면을 안 보고 있다는 인상을 준다.
+ */
+export function matchComment(
+  correct: boolean,
+  hasItem: boolean,
+  used: Set<string> = new Set(),
+  rng: () => number = Math.random,
+): string {
+  // 일치 라운드는 정답자가 여럿이라 같은 문장이 나란히 뜨기 쉽다. 한 심사 안에서는
+  // 쓴 문장을 피해 뽑는다 (풀이 바닥나면 그때만 중복 허용)
+  const pool = correct
+    ? MATCH_CORRECT_COMMENTS
+    : hasItem
+      ? MATCH_WRONG_COMMENTS
+      : MATCH_EMPTY_COMMENTS;
+  return pickFresh(pool, rng, used);
 }
 
 /** 같은 심사에서 같은 문장이 두 번 나오지 않도록 사용 이력을 피해 뽑기 */
@@ -210,23 +249,25 @@ export class LocalJudge {
       return {
         playerId: entry.playerId,
         score,
-        comment: this.comment(entry, score, used),
+        comment: this.comment(payload.topic, entry, score, used),
       };
     });
     return { verdicts };
   }
 
   private scoreItem(topic: Topic, item: PropMeta): number {
-    let score = 30; // 기본점 — 일단 뭐라도 들고 왔으면 성의 점수
-    for (const tag of item.tags) {
-      score += topic.tagWeights[tag] ?? 0;
-    }
-    score += (this.rng() - 0.5) * 16; // AI 심사위원의 변덕 ±8
-    return Math.max(0, Math.min(100, Math.round(score)));
+    const base = scoreProp(topic, item);
+    const varied = base + (this.rng() - 0.5) * 16; // AI 심사위원의 변덕 ±8
+    return Math.max(0, Math.min(100, Math.round(varied)));
   }
 
-  private comment(entry: JudgeEntry, score: number, used: Set<string>): string {
+  private comment(topic: Topic, entry: JudgeEntry, score: number, used: Set<string>): string {
     const item = entry.item!;
+    // 이 질문에 이 물건을 들고 온 것에 대한 전용 문장이 있으면 그게 항상 최우선이다.
+    // 범용 템플릿에 추임새를 얹어 만든 문장보다 짧아도 훨씬 정확하고 웃기다
+    const specific = verdictLine(topic.id, item.id);
+    if (specific) return specific;
+
     const pool = score >= 70 ? HIGH_TEMPLATES : score >= 40 ? MID_TEMPLATES : LOW_TEMPLATES;
     let comment = fill(pickFresh(pool, this.rng, used), entry.playerName, item.name);
     // 태그 기반 추임새를 확률적으로 앞에 붙여 다양성 확보

@@ -100,6 +100,9 @@ class WindEvent implements RoundEvent {
       p.body.applyImpulse({ x: 0, y: 0, z: m * 4.5 * dt }, true);
     }
     for (const prop of ctx.props.props) {
+      // 손에 든 물건은 바람을 타지 않는다. 그랩은 조인트로 손에 붙여 두는 방식이라
+      // 여기서 토크를 걸면 물건이 손 안에서 팽이처럼 돌아 "들고 있다"가 깨진다.
+      if (prop.heldBy.size > 0) continue;
       if (!this.inZone(prop.position.x)) continue;
       const m = prop.body.mass();
       prop.body.applyImpulse({ x: 0, y: m * 1.4 * dt, z: m * 7 * dt }, true);
@@ -243,96 +246,6 @@ class BlackoutEvent implements RoundEvent {
 }
 
 /**
- * 불티 번짐 — 화로대에서 잔불이 튀어 바닥에 자국을 남긴다.
- *
- * 돌풍이 "존을 가로지르면 힘으로 밀리는" 회피 불가형이라면, 이건 "보고 피해야 하는"
- * 능동 회피형이다. 잔불 자국은 바닥에 항상 뚜렷이 보이므로 은닉 0을 해치지 않는다.
- * 자라는 동안(0.35초)은 판정이 없어서, 생기는 걸 보고 비킬 시간이 주어진다.
- */
-class EmberEvent implements RoundEvent {
-  id = 'ember';
-  title = '불씨 조심해!';
-  desc = '잔불을 밟으면 들고 있던 물건을 놓친다!';
-
-  private static readonly SPREAD = 4.5;   // 화로대에서 잔불이 튀는 최대 거리
-  private static readonly LIFE = 2.5;
-  private static readonly GROW = 0.35;    // 다 자랄 때까지 — 이 동안은 무해하다
-  private static readonly MAX = 3;
-  private static readonly R = 0.55;
-
-  private embers: { mesh: THREE.Mesh; x: number; z: number; age: number }[] = [];
-  private timer = 0.7;
-  private pitX = 0;
-  private pitZ = 0;
-
-  start(ctx: EventCtx) {
-    const pit = ctx.world.concept.furniture.find((f) => f.glb === 'fire-pit');
-    this.pitX = pit?.x ?? 0;
-    this.pitZ = pit?.z ?? 0;
-    this.embers = [];
-    this.timer = 0.7;
-  }
-
-  tick(ctx: EventCtx, dt: number) {
-    this.timer -= dt;
-    if (this.timer <= 0 && this.embers.length < EmberEvent.MAX) {
-      this.timer = 1.2 + Math.random() * 0.6;
-      this.spawn(ctx);
-    }
-
-    for (const e of this.embers) {
-      e.age += dt;
-      // 자랄 때 커지고 꺼질 때 작아진다 — 언제 위험해지는지가 크기로 읽힌다
-      const grow = Math.min(1, e.age / EmberEvent.GROW);
-      const fade = Math.max(0, Math.min(1, (EmberEvent.LIFE - e.age) / 0.5));
-      const s = grow * fade;
-      e.mesh.scale.set(s, s, s);
-      (e.mesh.material as THREE.MeshBasicMaterial).opacity = 0.6 * fade;
-    }
-    this.embers = this.embers.filter((e) => {
-      if (e.age < EmberEvent.LIFE) return true;
-      ctx.world.scene.remove(e.mesh);
-      return false;
-    });
-
-    for (const p of ctx.players) {
-      if (!p.held) continue;
-      for (const e of this.embers) {
-        if (e.age < EmberEvent.GROW) continue;
-        if (Math.hypot(p.position.x - e.x, p.position.z - e.z) > EmberEvent.R) continue;
-        p.release();
-        sfx.sizzle();
-        ctx.world.shake(0.12);
-        ctx.pulse('앗 뜨거!');
-        break;
-      }
-    }
-  }
-
-  private spawn(ctx: EventCtx) {
-    const ang = Math.random() * Math.PI * 2;
-    const dist = 1.0 + Math.random() * EmberEvent.SPREAD;
-    const x = THREE.MathUtils.clamp(this.pitX + Math.cos(ang) * dist, -7, 7);
-    const z = THREE.MathUtils.clamp(this.pitZ + Math.sin(ang) * dist, -5.4, 5.4);
-    const mesh = new THREE.Mesh(
-      new THREE.CircleGeometry(EmberEvent.R, 20),
-      new THREE.MeshBasicMaterial({
-        color: 0xff5a2a, transparent: true, opacity: 0, depthWrite: false,
-      }),
-    );
-    mesh.rotation.x = -Math.PI / 2;
-    mesh.position.set(x, 0.02, z);
-    ctx.world.scene.add(mesh);
-    this.embers.push({ mesh, x, z, age: 0 });
-  }
-
-  end(ctx: EventCtx) {
-    for (const e of this.embers) ctx.world.scene.remove(e.mesh);
-    this.embers = [];
-  }
-}
-
-/**
  * 야생동물 난입 — 아이스박스에서 너구리가 튀어나와 프롭 하나를 물고 도망친다.
  *
  * 리그·애니메이션 없이 코드로만 움직인다. 이동 방향으로 기울이고 위아래로 통통 튀게
@@ -375,7 +288,8 @@ class RaccoonEvent implements RoundEvent {
     ctx.world.scene.add(this.mesh);
 
     this.phase = 'wait';
-    this.timer = 2.5 + Math.random() * 2;
+    // 첫 등장은 빨리 — 25초 라운드에서 5초쯤 기다리면 절반이 지나간다
+    this.timer = 1.2 + Math.random() * 1.2;
     this.target = null;
     this.carrying = null;
   }
@@ -443,7 +357,9 @@ class RaccoonEvent implements RoundEvent {
       this.target = null;
       mesh.visible = false;
       this.phase = 'wait';
-      this.timer = 4 + Math.random() * 3;
+      // 굴로 돌아간 뒤 다시 나오기까지 — 예전 4~7초는 라운드당 두세 번이 한계였다.
+      // 바닥에 프롭이 22개 깔리므로 하나씩 물어가도 판이 비지 않는다
+      this.timer = 1.8 + Math.random() * 1.6;
     }
   }
 
@@ -608,7 +524,6 @@ const FACTORIES: Record<string, () => RoundEvent> = {
   wind: () => new WindEvent(),
   rumble: () => new RumbleEvent(),
   blackout: () => new BlackoutEvent(),
-  ember: () => new EmberEvent(),
   raccoon: () => new RaccoonEvent(),
   rain: () => new RainEvent(),
 };

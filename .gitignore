@@ -12,3 +12,4 @@ server/.env
 asset-viewer.html
 camping-preview.html
 public/_preview/
+docs/build/

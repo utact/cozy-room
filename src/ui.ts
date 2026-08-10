@@ -199,26 +199,67 @@ const CSS = `
 @keyframes evpulse { 30% { transform: translateX(-50%) scale(1.12); } }
 
 /* 아래 여백은 %가 아니라 고정값 — 화면이 낮으면 %가 작아져 칩이 가장자리에 붙어 잘린다.
-   4인이 항상 한 줄에 들어가야 하므로 줄바꿈 없이 칩 폭을 줄인다 */
-.hud { position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%);
-  display: flex; gap: 8px; flex-wrap: nowrap; justify-content: center; max-width: 96vw; }
-.chip { display: flex; align-items: center; gap: 8px; padding: 6px 13px 6px 7px;
-  border-radius: 999px; background: var(--panel); backdrop-filter: blur(6px);
-  border: 1px solid var(--line); min-width: 0; }
+   4인이 항상 한 줄에 들어가야 하므로 줄바꿈 없이 칩 폭을 줄인다.
+
+   "누가 무엇을 들었는가"는 이 게임에서 유일하게 봐야 하는 정보인데, 예전 칩은 배경과
+   같은 먹빛에 12.5px 글자라 3D 화면에 묻혀 존재 자체가 안 보였다. 판을 밝히고 키우고
+   플레이어 색 테두리를 둘러 시선을 붙잡는다. */
+/* left:50% + translateX(-50%) 로 가운데 맞추면 안 된다. 자동 너비 절대배치 요소의
+   가용 폭은 "포함블록 폭 - left" 라서 화면의 절반(720px)으로 잘리고, 그 안에 칩 4개를
+   욱여넣느라 물건 이름이 "여권·통장 파…" 로 잘리고 점수가 두 줄로 접혔다.
+   left/right 0 으로 전폭을 잡고 justify-content 로 가운데 정렬한다. */
+.hud { position: absolute; bottom: 20px; left: 0; right: 0;
+  display: flex; gap: 10px; flex-wrap: nowrap; justify-content: center;
+  padding: 0 12px; }
+.chip { display: flex; align-items: center; gap: 10px; padding: 7px 16px 7px 9px;
+  border-radius: 999px; background: rgba(20,15,12,.93); backdrop-filter: blur(8px);
+  border: 2px solid var(--chip-color, var(--line)); min-width: 0;
+  box-shadow: 0 6px 18px rgba(0,0,0,.55), 0 0 0 1px rgba(0,0,0,.5);
+  transition: transform .18s cubic-bezier(.2,1.4,.4,1); }
+
+/* 좁거나 낮은 창 — 노트북 한 대를 둘이 나눠 쓰는 게 전제라 창이 작을 수 있다.
+   4인 칩이 한 줄에 안 들어가면 줄바꿈 대신 통째로 축소한다. 줄이 늘면 3D 화면을
+   그만큼 더 가리고, 세로가 낮은 창일수록 그게 치명적이다. */
+@media (max-width: 1180px), (max-height: 700px) {
+  .hud { gap: 7px; bottom: 12px; }
+  .chip { gap: 7px; padding: 5px 12px 5px 7px; border-width: 1.5px; }
+  .chip .info { max-width: 128px; }
+  .chip .pname { font-size: 10.5px; }
+  .chip .item { font-size: 13.5px; }
+  .chip .item.empty { font-size: 12px; }
+  .chip .pts { font-size: 18px; }
+  .chip .pts small { font-size: 9.5px; }
+  .avatar.mini { width: 26px; height: 35px; }
+}
+@media (max-width: 940px), (max-height: 560px) {
+  .hud { gap: 5px; bottom: 8px; }
+  .chip { gap: 5px; padding: 4px 9px 4px 5px; }
+  .chip .info { max-width: 96px; }
+  .chip .pname { font-size: 9.5px; }
+  .chip .item { font-size: 11.5px; }
+  .chip .item.empty { font-size: 10.5px; }
+  .chip .pts { font-size: 15px; }
+  .avatar.mini { width: 21px; height: 28px; }
+}
+/* 물건을 든 순간 칩이 살짝 커진다 — 화면 아래를 안 보고 있어도 곁눈에 걸린다 */
+.chip.holding { transform: translateY(-3px) scale(1.04); }
 /* 물건 이름이 잘리면 뭘 들었는지 알 수 없다 — 이름 길이에 맞춰 늘어나게 두고,
    아주 긴 이름일 때만 말줄임으로 넘긴다 */
-.chip .info { display: flex; flex-direction: column; gap: 0; min-width: 0;
-  max-width: 150px; text-align: left; }
+.chip .info { display: flex; flex-direction: column; gap: 1px; min-width: 0;
+  max-width: 170px; text-align: left; }
 .chip .item { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.chip .pname { font-size: 12.5px; font-weight: 800; letter-spacing: .3px; }
-.chip .item { font-size: 12.5px; font-weight: 600; }
-.chip .item.empty { color: var(--cream-faint); font-weight: 400; }
-.chip .pts { font-size: 17px; font-weight: 900; font-variant-numeric: tabular-nums; }
+.chip .pname { font-size: 12px; font-weight: 800; letter-spacing: .4px; line-height: 1.1; }
+.chip .item { font-size: 16px; font-weight: 800; color: var(--cream); line-height: 1.2; }
+.chip .item.empty { color: var(--cream-faint); font-weight: 500; font-size: 14px; }
+.chip .pts { font-size: 23px; font-weight: 900; font-variant-numeric: tabular-nums;
+  color: var(--lamp-hot); line-height: 1; white-space: nowrap; flex: none; }
 .chip .pts small { font-size: 11px; color: var(--cream-dim); font-weight: 700; }
-.avatar.mini { width: 30px; height: 36px; }
-.avatar.mini .eye { top: 9px; width: 6px; height: 7px; }
-.avatar.mini .eye::after { bottom: 1px; left: 1.5px; width: 3px; height: 3.5px; }
-.avatar.mini .eye.l { left: 6px; } .avatar.mini .eye.r { right: 6px; }
+/* 칩 초상은 전신 — 예전엔 허리에서 자른 흉상이었는데 목도 어깨도 없는 젤리빈이라
+   흉상으로 안 읽히고 "이미지가 깨졌다"로 보였다 */
+.avatar.mini { width: 34px; height: 46px; }
+.avatar.mini .eye { top: 11px; width: 7px; height: 8px; }
+.avatar.mini .eye::after { bottom: 1px; left: 1.5px; width: 3.5px; height: 4px; }
+.avatar.mini .eye.l { left: 7px; } .avatar.mini .eye.r { right: 7px; }
 
 /* ── 심사 ── */
 /* 주제 판과 같은 조형(어두운 판 + 램프색 윗선)을 써서 두 화면이 한 게임처럼 보이게 한다 */
@@ -229,10 +270,11 @@ const CSS = `
   display: flex; flex-direction: column; gap: 10px; }
 .judge-panel h2 { margin: 0; font-size: var(--fs-h2); color: var(--lamp-hot);
   display: flex; align-items: center; gap: 11px; }
-.judge-avatar { width: 40px; height: 40px; border-radius: 50%; object-fit: cover;
-  border: 2px solid rgba(255,214,150,.35); }
-.tada-avatar { width: 60px; height: 60px; border-radius: 50%; object-fit: cover;
+.judge-avatar { width: 40px; height: 40px; border-radius: 50%; flex: none;
+  border: 2px solid rgba(255,214,150,.35); display: block; }
+.tada-avatar { width: 60px; height: 60px; border-radius: 50%;
   border: 2px solid var(--lamp); margin: 0 auto 8px; display: block; }
+.judge-face { width: 100%; height: 100%; display: block; border-radius: 50%; }
 .judge-panel .topic-small { font-size: 14px; color: var(--cream-dim);
   padding-bottom: 4px; }
 /* 판정 한 줄 — 누구 것인지는 왼쪽 색 막대로 안다. 이름 앞글자를 딴 동그라미는 쓰지 않는다 */
@@ -400,8 +442,24 @@ export class UI {
     return e;
   }
 
-  /** 생성형 아트 로드 성공 시 채워지는 URL (심사 패널 등에서 사용) */
-  private judgeArtUrl: string | null = null;
+  /**
+   * AI 심사위원 얼굴 — 인라인 SVG.
+   *
+   * 예전에는 생성 이미지를 CDN에서 받아 썼는데 그 URL이 죽어 심사 패널이 얼굴 없이
+   * 떴다. 40px 아이콘 하나 때문에 외부 요청을 걸 이유가 없어 코드로 그린다.
+   */
+  private readonly judgeFace = `<svg class="judge-face" viewBox="0 0 40 40" aria-hidden="true">
+      <circle cx="20" cy="20" r="20" fill="#2a211b"/>
+      <rect x="19" y="3" width="2" height="5" rx="1" fill="#f0a94c"/>
+      <circle cx="20" cy="3.5" r="2.2" fill="#f0a94c"/>
+      <rect x="7" y="9" width="26" height="22" rx="9" fill="#f7efe4"/>
+      <rect x="11" y="15" width="18" height="8" rx="4" fill="#191411"/>
+      <circle cx="16" cy="19" r="2.4" fill="#f0a94c"/>
+      <circle cx="24" cy="19" r="2.4" fill="#f0a94c"/>
+      <path d="M15 27.5c2.6 1.8 7.4 1.8 10 0" stroke="#c9905a" stroke-width="1.8"
+            stroke-linecap="round" fill="none"/>
+      <path d="M20 32.5l-4.5 3.5h9z" fill="#191411"/>
+    </svg>`;
 
   private lobbyEl!: HTMLDivElement;
 
@@ -442,9 +500,6 @@ export class UI {
         backdrop.classList.add('on');
       }
     });
-    loadArt(ART.judge, (url) => {
-      this.judgeArtUrl = url;
-    });
     loadArt(ART.ribbonBadge, (url) => {
       ribbonEl.classList.remove('pending');
       if (!url) return;
@@ -484,7 +539,7 @@ export class UI {
 
   // ── 클로즈업 "따란" 카드 ──
   showTada(label: string, main: string) {
-    const avatar = this.judgeArtUrl ? `<img class="tada-avatar" src="${this.judgeArtUrl}" alt="" />` : '';
+    const avatar = `<div class="tada-avatar">${this.judgeFace}</div>`;
     this.tadaEl.innerHTML = `${avatar}<div class="t-label">${label}</div><div class="t-main headline">${main}</div>`;
     this.tadaEl.classList.remove('shown');
     requestAnimationFrame(() => requestAnimationFrame(() => this.tadaEl.classList.add('shown')));
@@ -644,18 +699,29 @@ export class UI {
     this.timerEl.classList.toggle('urgent', sec <= 5.5);
   }
 
+  /** 마지막으로 그린 HUD 내용 — 같으면 다시 그리지 않는다 */
+  private hudSig = '';
+
   setHud(entries: HudEntry[] | null) {
     if (!entries) {
       this.hudEl.classList.add('hidden');
+      this.hudSig = '';
       return;
     }
     this.hudEl.classList.remove('hidden');
+    // setHud는 게임 루프에서 매 틱 불린다. 내용이 그대로인데 innerHTML을 다시 쓰면
+    // 초당 60번 DOM을 버리고 새로 만들게 되고, 그러면 CSS 전환이 시작되자마자
+    // 요소가 교체돼 애니메이션이 아예 나타나지 않는다.
+    const sig = entries.map((e) => `${e.name}|${e.color}|${e.heldName ?? ''}|${e.score}`).join(';');
+    if (sig === this.hudSig) return;
+    this.hudSig = sig;
     this.hudEl.innerHTML = '';
     for (const e of entries) {
       const chip = document.createElement('div');
-      chip.className = 'chip';
+      chip.className = 'chip' + (e.heldName ? ' holding' : '');
+      chip.style.setProperty('--chip-color', colorHex(e.color));
       chip.innerHTML =
-        avatarHtml(e.color, true, this.portraits.get(e.color) ?? null) +
+        avatarHtml(e.color, true, this.portraitsFull.get(e.color) ?? null) +
         `<div class="info"><span class="pname" style="color:${colorHex(e.color)}">${e.name}</span>` +
         (e.heldName
           ? `<span class="item">${e.heldName}</span>`
@@ -668,11 +734,8 @@ export class UI {
   // ── 심사 ──
   showJudgePanel(topicText: string) {
     this.judgeEl.classList.remove('hidden');
-    // 초상이 있으면 그것만, 없으면 글자만 — "AI"를 아이콘과 제목에 두 번 쓰지 않는다
-    const avatar = this.judgeArtUrl
-      ? `<img class="judge-avatar" src="${this.judgeArtUrl}" alt="" />` : '';
     this.judgeEl.innerHTML =
-      `<h2>${avatar}AI 심사위원의 판정</h2>` +
+      `<h2><span class="judge-avatar">${this.judgeFace}</span>AI 심사위원의 판정</h2>` +
       `<div class="topic-small">${topicText}</div>`;
     this.judgeList = this.el('div', '', this.judgeEl);
     this.judgeList.style.display = 'flex';

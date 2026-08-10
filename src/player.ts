@@ -192,6 +192,19 @@ export class Player {
     if (!prop) return;
     sfx.grab();
     this.visual.trigger('grab');
+
+    // 물건을 손 위치로 먼저 옮겨 놓고 조인트를 건다.
+    //
+    // 이걸 안 하면 임펄스 조인트가 처음 한 틱에 "떨어져 있는 두 점"을 붙이려고 큰 보정
+    // 임펄스를 쓰고, 그 반작용이 플레이어 몸에 그대로 걸려 캐릭터가 붕 뜬다 — 점프 키가
+    // 없는데 물건을 집을 때마다 뛰어오르는 것처럼 보였던 원인이다. 무거운 물건일수록
+    // 심했고, 프롭 치수를 키우면서 질량이 3배 가까이 늘어 더 눈에 띄게 됐다.
+    // 시작부터 조인트가 충족된 상태면 보정할 게 없다.
+    const hand = this.handWorld;
+    prop.body.setTranslation({ x: hand.x, y: hand.y, z: hand.z }, true);
+    prop.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+    prop.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+
     const params = RAPIER.JointData.spherical(
       { x: HAND_LOCAL.x, y: HAND_LOCAL.y, z: HAND_LOCAL.z },
       { x: 0, y: 0, z: 0 },

@@ -41,58 +41,65 @@ export const LOOKALIKES: Record<string, string[]> = Object.fromEntries(
   GROUPS.flatMap((g) => g.map((id) => [id, g.filter((o) => o !== id)])),
 );
 
+/**
+ * 치수는 전부 실물보다 크다 — 캐릭터 키 1.52 대비 최대 변 0.5~0.9다.
+ *
+ * 사실적인 비율(리모컨 0.15)로 두면 게임 카메라에서 20px짜리 점이 되어 "무엇을 들었는가"가
+ * 안 보인다. 이 게임의 판단은 전부 실루엣 식별에서 나오므로 판독성이 사실성을 이긴다.
+ * 대신 무게감은 density가 담당한다 — 리모컨은 커도 가볍고 청소기는 묵직하다.
+ */
 export const PROP_CATALOG: PropMeta[] = [
   // ── 화재 대피 후보 ──
   {
     id: 'photo-frame', name: '가족 사진 액자', tags: ['소중함', '추억', '인테리어', '납작함'],
-    shape: 'box', size: [0.5, 0.06, 0.35], density: 0.6,
+    shape: 'box', size: [0.72, 0.09, 0.5], density: 0.6,
   },
   {
     id: 'laptop', name: '노트북', tags: ['비쌈', '전자기기', '일', '소중함', '납작함'],
-    shape: 'box', size: [0.5, 0.16, 0.32], density: 1.0,
+    shape: 'box', size: [0.72, 0.23, 0.46], density: 1.0,
   },
   {
     id: 'passport-pouch', name: '여권·통장 파우치', tags: ['소중함', '안전', '생존', '가벼움'],
-    shape: 'box', size: [0.35, 0.22, 0.19], density: 0.4,
+    shape: 'box', size: [0.5, 0.32, 0.27], density: 0.4,
   },
   {
     id: 'teddy-bear', name: '곰인형', tags: ['귀여움', '포근함', '부드러움', '소중함'],
-    shape: 'box', size: [0.4, 0.45, 0.32], density: 0.3,
+    shape: 'box', size: [0.56, 0.63, 0.45], density: 0.3,
   },
 
   // ── 층간소음 복수 후보 ──
   {
     id: 'broom', name: '빗자루', tags: ['청소', '정리', '길쭉함', '소음'],
-    shape: 'box', size: [0.24, 0.7, 0.17], density: 0.5,
+    shape: 'box', size: [0.32, 0.98, 0.24], density: 0.5,
   },
   {
     id: 'vacuum', name: '무선청소기', tags: ['청소', '정리', '전자기기', '무거움', '소음'],
-    shape: 'box', size: [0.31, 0.58, 0.65], density: 1.4,
+    shape: 'box', size: [0.43, 0.81, 0.9], density: 1.4,
   },
   {
     id: 'speaker', name: '블루투스 스피커', tags: ['전자기기', '파티', '분위기', '소음'],
-    shape: 'cylinder', size: [0.14, 0.225, 0.14], density: 0.8,
+    shape: 'cylinder', size: [0.21, 0.33, 0.21], density: 0.8,
   },
   {
     id: 'monstera', name: '몬스테라 화분', tags: ['인테리어', '식물', '자연', '무거움'],
-    shape: 'box', size: [0.5, 0.45, 0.49], density: 1.8,
+    shape: 'box', size: [0.7, 0.63, 0.69], density: 1.8,
   },
 
   // ── 넷플릭스 정주행 후보 ──
   {
     id: 'blanket', name: '극세사 담요', tags: ['포근함', '수면', '부드러움', '생존'],
-    shape: 'box', size: [0.5, 0.32, 0.41], density: 0.2,
+    shape: 'box', size: [0.7, 0.45, 0.57], density: 0.2,
   },
   {
     id: 'cushion', name: '쿠션', tags: ['포근함', '부드러움', '수면', '인테리어'],
-    shape: 'box', size: [0.45, 0.43, 0.3], density: 0.15,
+    shape: 'box', size: [0.63, 0.6, 0.42], density: 0.15,
   },
   {
     id: 'tv-remote', name: 'TV 리모컨', tags: ['전자기기', '일상', '납작함', '가벼움'],
-    shape: 'box', size: [0.45, 0.16, 0.09], density: 0.35,
+    shape: 'box', size: [0.63, 0.23, 0.13], density: 0.35,
   },
   {
     id: 'headphones', name: '헤드폰', tags: ['전자기기', '수면', '소중함', '분위기'],
-    shape: 'box', size: [0.4, 0.34, 0.14], density: 0.45,
+    shape: 'box', size: [0.56, 0.48, 0.2], density: 0.45,
   },
 ];

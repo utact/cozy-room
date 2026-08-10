@@ -27,11 +27,12 @@ const FIXED_DT = 1 / 60;
 // 1~2번 슬롯은 키보드, 3~4번은 AI 전용 — 정원은 색상 배열에 맞춰 자동으로 따라간다
 const MAX_PLAYERS = PLAYER_COLORS.length;
 
+// 방을 13×9.5로 좁혔으므로 스폰도 안쪽으로 당긴다 (방 절반 = 6.5 × 4.75)
 const SPAWNS = [
-  new THREE.Vector3(-5.5, 1.2, 3.5),
-  new THREE.Vector3(5.5, 1.2, 3.5),
-  new THREE.Vector3(-5.5, 1.2, -3.5),
-  new THREE.Vector3(5.5, 1.2, -3.5),
+  new THREE.Vector3(-4.9, 1.2, 3.4),
+  new THREE.Vector3(4.9, 1.2, 3.4),
+  new THREE.Vector3(-4.9, 1.2, -3.4),
+  new THREE.Vector3(4.9, 1.2, -3.4),
 ];
 
 type State = 'menu' | 'topic' | 'scramble' | 'judging' | 'results';
@@ -86,6 +87,9 @@ export class Game {
 
   private botCount = 0;
 
+  /** 라운드 목표를 넣어 줘야 하므로 봇 소스를 따로 들고 있는다 */
+  private bots: BotSource[] = [];
+
   private addBot() {
     if (this.players.length >= MAX_PLAYERS) return;
     const source = new BotSource(this.botCount++);
@@ -93,7 +97,17 @@ export class Game {
     this.addPlayer(source);
     const bot = this.players[this.players.length - 1];
     source.bind(bot, this.players, this.props);
+    this.bots.push(source);
     sfx.grab();
+  }
+
+  /** 봇에게 이번 라운드의 채점 기준과 남은 시간을 알려 준다 */
+  private briefBots() {
+    const remaining = () =>
+      this.state === 'scramble' ? Math.max(0, SCRAMBLE_TIME - this.stateTime) : SCRAMBLE_TIME;
+    for (const bot of this.bots) {
+      bot.setRound(this.matchTarget ? null : this.currentTopic, this.matchTarget, remaining);
+    }
   }
 
   start() {
@@ -232,6 +246,7 @@ export class Game {
     this.tugs.clear();
     this.matchTarget =
       this.roundTypes[this.round - 1] === 'match' ? this.setupMatchRound() : null;
+    this.briefBots();
     this.players.forEach((p, i) => {
       p.frozen = false;
       p.resetForRound(SPAWNS[i]);
@@ -249,8 +264,11 @@ export class Game {
 
   /**
    * 일치 라운드 목표 선정 — 의자앉기 + 낚시.
-   * 방에는 모든 물건이 딱 하나씩만 있으므로, 목표를 정하는 것만으로 "하나 모자란"
-   * 상황이 성립한다(2인 기준). 닮은꼴 미끼도 이미 방에 하나씩 깔려 있다.
+   *
+   * 핵심은 **목표 프롭이 인원수보다 딱 하나 적어야 한다**는 것이다. 예전에는 목표를
+   * 정하기만 하고 방에 있는 하나로 뒀는데, 그건 2인일 때만 "하나 모자란" 상황이 된다.
+   * 4인이면 셋이 빈손으로 끝나 라운드가 게임이 아니라 추첨이 됐다.
+   * 방에 이미 하나 있으므로 인원수-2개를 더 깐다. 닮은꼴 미끼도 이미 깔려 있다.
    */
   private setupMatchRound(): PropMeta | null {
     const present = new Set(this.world.concept.propIds);
@@ -259,7 +277,11 @@ export class Game {
     );
     if (candidates.length === 0) return null; // 조건 미달 → 일반 라운드로
     const targetId = candidates[Math.floor(Math.random() * candidates.length)];
-    return PROP_CATALOG.find((m) => m.id === targetId)!;
+    const target = PROP_CATALOG.find((m) => m.id === targetId)!;
+    // 바닥 정원을 채우느라 이미 여벌이 깔려 있을 수 있다 — 부족한 만큼만 더한다
+    const existing = this.props.props.filter((p) => p.meta.id === target.id).length;
+    this.props.addCopies(target, Math.max(0, this.players.length - 1 - existing));
+    return target;
   }
 
   private get currentTopic(): Topic {
@@ -324,13 +346,19 @@ export class Game {
       const holders = [...prop.heldBy];
       const rolls = holders.map((id) => tug.effort[id] * (0.85 + Math.random() * 0.3));
       const winner = holders[rolls.indexOf(Math.max(...rolls))];
+      let stolen = false;
       for (const id of holders) {
         if (id === winner) continue;
         // 패배의 대가 — 손에서 놓친다
         this.players[id].release();
         sfx.bonk();
-        this.ui.pulseEvent(`${PLAYER_NAMES[id]} 뺏겼다!`);
+        this.ui.pulseEvent(`${PLAYER_NAMES[winner]} → ${PLAYER_NAMES[id]} 뺏었다!`);
+        stolen = true;
       }
+      // 카메라를 뺏긴 지점으로 당겼다 빼는 연출도 해 봤는데, 난투 중엔 뺏기가 몇 초에
+      // 한 번씩 터져서 화면이 계속 들썩였다. 정작 내 캐릭터를 놓쳐 조작이 끊긴다.
+      // 짧은 진동만 남긴다 — 사건은 알리되 시점은 건드리지 않는다
+      if (stolen) this.world.shake(0.22);
       this.tugs.delete(prop);
     }
   }
@@ -361,9 +389,14 @@ export class Game {
     // 1) 플레이어 본체 명중 → 들고 있던 물건 낙하 + 넉백
     const player = this.playersByCollider.get(victimHandle);
     if (player && player.id !== thrower) {
+      const wasHolding = player.held !== null;
       const dir = player.position.sub(prop.position);
       player.onHit(dir);
       prop.thrownBy = -1;
+      // 빈손을 맞히는 건 흔하지만 든 걸 떨어뜨리는 건 판이 바뀌는 순간이다
+      if (wasHolding) {
+        this.ui.pulseEvent(`${PLAYER_NAMES[thrower]}의 명중! ${PLAYER_NAMES[player.id]} 놓쳤다!`);
+      }
       return;
     }
     // 2) 상대가 들고 있는 프롭 명중 → 강제 낙하
@@ -456,12 +489,12 @@ export class Game {
       const p = this.players[star.playerId];
       this.world.focusOn(p.position);
       sfx.drumroll();
-      this.ui.showTada('과연', '오늘의 주인공은…?');
+      this.ui.showTada('잠깐', '한 명이 다른 걸 들고 있습니다.');
       await delay(2000);
       sfx.tada();
       const isLook = !!star.item && (LOOKALIKES[target.id] ?? []).includes(star.item.id);
       this.ui.showTada(
-        `따란~ 오늘의 주인공: ${PLAYER_NAMES[star.playerId]}`,
+        `${PLAYER_NAMES[star.playerId]} 선수`,
         matchPunchline(PLAYER_NAMES[star.playerId], target.name, star.item?.name ?? null, isLook),
       );
       await delay(3400);
@@ -471,6 +504,7 @@ export class Game {
     }
 
     this.ui.showJudgePanel(`모두 ${josa(target.name, '을를')} 들어라!`);
+    const usedComments = new Set<string>();
     const verdicts = entries.map((e) => {
       const correct = isCorrect(e);
       const score = correct
@@ -478,7 +512,11 @@ export class Game {
         : e.item
           ? 8 + Math.floor(Math.random() * 12)
           : 3 + Math.floor(Math.random() * 8);
-      return { playerId: e.playerId, score, comment: matchComment(correct) };
+      return {
+        playerId: e.playerId,
+        score,
+        comment: matchComment(correct, !!e.item, usedComments),
+      };
     });
     await this.revealVerdicts(entries, verdicts);
   }
