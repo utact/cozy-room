@@ -9,7 +9,8 @@
  * 초록보다 확실히 높은 유일한 영역이라 그 조건으로 잡으면 안정적이다.
  * (피사체는 탄·크림·테라코타 계열이라 전부 초록 ≥ 파랑이다)
  *
- * 전역 색상 키 대신 가장자리에서 시작하는 플러드 필을 쓴다 — 피사체 안쪽에
+ * 전역 색상 키 대신 가장자리에서 시작
+ * 하는 플러드 필을 쓴다 — 피사체 안쪽에
  * 우연히 배경색과 가까운 픽셀이 있어도 뚫리지 않는다.
  */
 
@@ -61,10 +62,16 @@ async function keyOutBackground(path) {
 for (const [src, out, alpha] of JOBS) {
   if (alpha) {
     const { img, pct } = await keyOutBackground(SRC + src);
-    await img.resize(880, 880, { fit: 'inside' }).webp({ quality: 90 }).toFile(OUT + out);
+    await img
+      .resize(880, 880, { fit: 'inside' })
+      .webp({ quality: 90 })
+      .toFile(OUT + out);
     console.log(`  ${src} → ${out}  (배경 ${pct}% 투명 처리)`);
   } else {
-    await sharp(SRC + src).resize(880, 880, { fit: 'cover' }).webp({ quality: 90 }).toFile(OUT + out);
+    await sharp(SRC + src)
+      .resize(880, 880, { fit: 'cover' })
+      .webp({ quality: 90 })
+      .toFile(OUT + out);
     console.log(`  ${src} → ${out}`);
   }
 }
