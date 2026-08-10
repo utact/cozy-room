@@ -7,9 +7,10 @@
  */
 
 import * as THREE from 'three';
-import { ROOM_D, type World3D } from './world';
+import { ROOM_D, ROOM_W, type World3D } from './world';
 import type { Player } from './player';
 import type { Prop, PropManager } from './objects';
+import type { AssetLibrary } from './assets';
 import { cloakObject, uncloakObject } from './visuals';
 import { sfx } from './sound';
 
@@ -17,6 +18,8 @@ export interface EventCtx {
   world: World3D;
   players: Player[];
   props: PropManager;
+  /** 모드가 직접 스폰하는 GLB(너구리 등)를 꺼내 쓰는 통로 */
+  assets: AssetLibrary;
   /** 순간 연출용 콜백 */
   pulse: (text: string) => void;
 }
@@ -239,10 +242,375 @@ class BlackoutEvent implements RoundEvent {
   }
 }
 
+/**
+ * 불티 번짐 — 화로대에서 잔불이 튀어 바닥에 자국을 남긴다.
+ *
+ * 돌풍이 "존을 가로지르면 힘으로 밀리는" 회피 불가형이라면, 이건 "보고 피해야 하는"
+ * 능동 회피형이다. 잔불 자국은 바닥에 항상 뚜렷이 보이므로 은닉 0을 해치지 않는다.
+ * 자라는 동안(0.35초)은 판정이 없어서, 생기는 걸 보고 비킬 시간이 주어진다.
+ */
+class EmberEvent implements RoundEvent {
+  id = 'ember';
+  title = '불씨 조심해!';
+  desc = '잔불을 밟으면 들고 있던 물건을 놓친다!';
+
+  private static readonly SPREAD = 4.5;   // 화로대에서 잔불이 튀는 최대 거리
+  private static readonly LIFE = 2.5;
+  private static readonly GROW = 0.35;    // 다 자랄 때까지 — 이 동안은 무해하다
+  private static readonly MAX = 3;
+  private static readonly R = 0.55;
+
+  private embers: { mesh: THREE.Mesh; x: number; z: number; age: number }[] = [];
+  private timer = 0.7;
+  private pitX = 0;
+  private pitZ = 0;
+
+  start(ctx: EventCtx) {
+    const pit = ctx.world.concept.furniture.find((f) => f.glb === 'fire-pit');
+    this.pitX = pit?.x ?? 0;
+    this.pitZ = pit?.z ?? 0;
+    this.embers = [];
+    this.timer = 0.7;
+  }
+
+  tick(ctx: EventCtx, dt: number) {
+    this.timer -= dt;
+    if (this.timer <= 0 && this.embers.length < EmberEvent.MAX) {
+      this.timer = 1.2 + Math.random() * 0.6;
+      this.spawn(ctx);
+    }
+
+    for (const e of this.embers) {
+      e.age += dt;
+      // 자랄 때 커지고 꺼질 때 작아진다 — 언제 위험해지는지가 크기로 읽힌다
+      const grow = Math.min(1, e.age / EmberEvent.GROW);
+      const fade = Math.max(0, Math.min(1, (EmberEvent.LIFE - e.age) / 0.5));
+      const s = grow * fade;
+      e.mesh.scale.set(s, s, s);
+      (e.mesh.material as THREE.MeshBasicMaterial).opacity = 0.6 * fade;
+    }
+    this.embers = this.embers.filter((e) => {
+      if (e.age < EmberEvent.LIFE) return true;
+      ctx.world.scene.remove(e.mesh);
+      return false;
+    });
+
+    for (const p of ctx.players) {
+      if (!p.held) continue;
+      for (const e of this.embers) {
+        if (e.age < EmberEvent.GROW) continue;
+        if (Math.hypot(p.position.x - e.x, p.position.z - e.z) > EmberEvent.R) continue;
+        p.release();
+        sfx.sizzle();
+        ctx.world.shake(0.12);
+        ctx.pulse('앗 뜨거!');
+        break;
+      }
+    }
+  }
+
+  private spawn(ctx: EventCtx) {
+    const ang = Math.random() * Math.PI * 2;
+    const dist = 1.0 + Math.random() * EmberEvent.SPREAD;
+    const x = THREE.MathUtils.clamp(this.pitX + Math.cos(ang) * dist, -7, 7);
+    const z = THREE.MathUtils.clamp(this.pitZ + Math.sin(ang) * dist, -5.4, 5.4);
+    const mesh = new THREE.Mesh(
+      new THREE.CircleGeometry(EmberEvent.R, 20),
+      new THREE.MeshBasicMaterial({
+        color: 0xff5a2a, transparent: true, opacity: 0, depthWrite: false,
+      }),
+    );
+    mesh.rotation.x = -Math.PI / 2;
+    mesh.position.set(x, 0.02, z);
+    ctx.world.scene.add(mesh);
+    this.embers.push({ mesh, x, z, age: 0 });
+  }
+
+  end(ctx: EventCtx) {
+    for (const e of this.embers) ctx.world.scene.remove(e.mesh);
+    this.embers = [];
+  }
+}
+
+/**
+ * 야생동물 난입 — 아이스박스에서 너구리가 튀어나와 프롭 하나를 물고 도망친다.
+ *
+ * 리그·애니메이션 없이 코드로만 움직인다. 이동 방향으로 기울이고 위아래로 통통 튀게
+ * 하는 것만으로 달리는 느낌이 난다 — 커튼을 코드로 흔드는 것과 같은 방식이다.
+ *
+ * 너구리는 물리 콜라이더가 없는 순수 시각 엔티티다. 그래서 던진 프롭과의 충돌은
+ * Rapier 이벤트가 아니라 매 틱 거리 비교로 판정한다(airship의 폭탄 착탄과 같은 접근).
+ * 도주 내내 화면에 계속 보이므로 은닉 0을 해치지 않는다.
+ */
+class RaccoonEvent implements RoundEvent {
+  id = 'raccoon';
+  title = '너구리가 물어간다!';
+  desc = '물고 도망치기 전에 던져서 맞혀라!';
+
+  private static readonly APPROACH_SPEED = 3.5;
+  private static readonly FLEE_SPEED = 4.2;
+  private static readonly HIT_R = 0.55;
+  /** 최대 변 기준 크기 — 캐릭터(1.52)의 3분의 1쯤이라 작지만 눈에 띈다 */
+  private static readonly SIZE = 0.55;
+
+  private mesh: THREE.Object3D | null = null;
+  private phase: 'wait' | 'approach' | 'flee' = 'wait';
+  private target: Prop | null = null;
+  private carrying: Prop | null = null;
+  private goal = new THREE.Vector3();
+  private timer = 2.5;
+  private homeX = 0;
+  private homeZ = 0;
+  private bob = 0;
+
+  start(ctx: EventCtx) {
+    const cooler = ctx.world.concept.furniture.find((f) => f.glb === 'cooler');
+    this.homeX = cooler?.x ?? ROOM_W / 2 - 1;
+    this.homeZ = cooler?.z ?? 0;
+
+    // 형태 후보가 둘이라 아직 확정되지 않았다 — ?raccoon=b 로 바꿔 본다
+    const variant = new URLSearchParams(location.search).get('raccoon') === 'b' ? 'b' : 'a';
+    this.mesh = ctx.assets.instantiateCreature(`raccoon-${variant}`, RaccoonEvent.SIZE);
+    this.mesh.visible = false;
+    ctx.world.scene.add(this.mesh);
+
+    this.phase = 'wait';
+    this.timer = 2.5 + Math.random() * 2;
+    this.target = null;
+    this.carrying = null;
+  }
+
+  tick(ctx: EventCtx, dt: number) {
+    const mesh = this.mesh;
+    if (!mesh) return;
+
+    if (this.phase === 'wait') {
+      this.timer -= dt;
+      if (this.timer <= 0) this.beginApproach(ctx);
+      return;
+    }
+
+    this.bob += dt;
+    const pos = mesh.position;
+    // 목표를 든 사람이 생기면 추격을 포기한다 — 손에 든 걸 뺏지는 않는다
+    if (this.phase === 'approach' && this.target && this.target.heldBy.size > 0) {
+      this.retreat();
+    }
+
+    const dest = this.phase === 'approach' ? this.target!.position : this.goal;
+    const dir = new THREE.Vector3(dest.x - pos.x, 0, dest.z - pos.z);
+    const dist = dir.length();
+    const speed = this.phase === 'approach'
+      ? RaccoonEvent.APPROACH_SPEED
+      : RaccoonEvent.FLEE_SPEED;
+
+    if (dist > 0.02) {
+      dir.divideScalar(dist);
+      pos.addScaledVector(dir, Math.min(speed * dt, dist));
+      mesh.rotation.y = Math.atan2(dir.x, dir.z);
+    }
+    // 달리는 시늉 — 통통 튀고 앞뒤로 기운다
+    pos.y = Math.abs(Math.sin(this.bob * 11)) * 0.07;
+    mesh.rotation.x = Math.sin(this.bob * 11) * 0.12;
+
+    if (this.carrying) {
+      this.carrying.body.setTranslation({ x: pos.x, y: 0.3, z: pos.z }, true);
+      this.carrying.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      for (const prop of ctx.props.props) {
+        if (prop === this.carrying || prop.thrownBy < 0) continue;
+        if (prop.position.distanceTo(pos) > RaccoonEvent.HIT_R) continue;
+        this.dropCarried();
+        sfx.critter();
+        ctx.pulse('너구리가 놓쳤다!');
+        break;
+      }
+    }
+
+    if (dist > 0.25) return;
+
+    if (this.phase === 'approach') {
+      const prize = this.target;
+      // 도착하는 사이에 누가 집었거나 던져진 상태면 빈손으로 돌아간다
+      if (prize && prize.heldBy.size === 0 && prize.thrownBy < 0) {
+        this.carrying = prize;
+        sfx.critter();
+        ctx.pulse('너구리가 물었다!');
+      }
+      this.retreat();
+    } else {
+      if (this.carrying) ctx.props.despawn(this.carrying);
+      this.carrying = null;
+      this.target = null;
+      mesh.visible = false;
+      this.phase = 'wait';
+      this.timer = 4 + Math.random() * 3;
+    }
+  }
+
+  private beginApproach(ctx: EventCtx) {
+    const free = ctx.props.props.filter((p) => p.heldBy.size === 0 && p.thrownBy < 0);
+    if (free.length === 0) {
+      this.timer = 1.5; // 노릴 게 없다 — 잠시 뒤 다시 본다
+      return;
+    }
+    this.target = free[Math.floor(Math.random() * free.length)];
+    this.mesh!.position.set(this.homeX, 0, this.homeZ);
+    this.mesh!.visible = true;
+    this.phase = 'approach';
+    sfx.critter();
+    ctx.pulse('너구리 등장!');
+  }
+
+  /**
+   * 도주 — 나왔던 아이스박스로 되돌아간다.
+   *
+   * "가장 가까운 벽으로"가 자연스러워 보이지만 그러면 안 된다. 프롭은 방 안쪽
+   * (x ±6.5 · z ±4.5)에 깔리므로 가장 가까운 벽까지는 1~2밖에 안 되고, 속도 4.2면
+   * 0.3초 만에 사라진다 — 던져서 맞힐 틈이 없어 모드의 핵심이 죽는다.
+   * 굴로 되돌아가면 경로가 길어져 쫓아가 맞힐 여지가 생기고, 나온 곳으로 돌아간다는
+   * 점에서 이야기도 맞는다.
+   */
+  private retreat() {
+    this.goal.set(this.homeX, 0, this.homeZ);
+    this.phase = 'flee';
+  }
+
+  private dropCarried() {
+    const prop = this.carrying;
+    if (!prop) return;
+    prop.body.setLinvel({ x: (Math.random() - 0.5) * 3, y: 2.4, z: (Math.random() - 0.5) * 3 }, true);
+    this.carrying = null;
+  }
+
+  end(ctx: EventCtx) {
+    if (this.mesh) {
+      ctx.world.scene.remove(this.mesh);
+      this.mesh = null;
+    }
+    // 물고 가던 중 라운드가 끝나면 프롭은 그 자리에 그대로 남긴다
+    this.carrying = null;
+    this.target = null;
+    this.phase = 'wait';
+  }
+}
+
+/**
+ * 소나기 — 텐트와 트인 하늘이 장치다.
+ *
+ * 정전이 "정체를 못 알아보게", 돌풍이 "힘으로 떠밀리게" 만든다면 이건 "다리가 말을
+ * 안 듣게" 만든다. 미끄러움은 콜라이더 마찰이 아니라 `Player.slippery` 로 구현한다 —
+ * 이동이 매 프레임 setLinvel 로 속도를 강제하는 방식이라 마찰은 이동감에 관여하지 않는다.
+ *
+ * 과거 왁스칠 모드가 같은 수치 레버를 썼는데 체감이 약했다. 화면에 아무 단서가 없으면
+ * "미끄럽다"가 아니라 "조작이 둔하다"로 읽히기 때문으로 보고, 이번엔 젖은 발자국·빗줄기·
+ * 몸 기울임·효과음을 함께 붙였다. 어느 신호가 실제로 기여하는지는 하나씩 꺼 보며 확인한다.
+ */
+class RainEvent implements RoundEvent {
+  id = 'rain';
+  title = '비 온다, 발밑 조심!';
+  desc = '바닥이 미끄럽다. 방향을 바꾸면 그대로 밀려난다!';
+
+  private static readonly DROPS = 150;
+
+  private rain: THREE.InstancedMesh | null = null;
+  private drops: { x: number; y: number; z: number; speed: number }[] = [];
+  private marks: { mesh: THREE.Mesh; age: number }[] = [];
+  private cooldown: number[] = [];
+
+  start(ctx: EventCtx) {
+    // 정전(0.12)보다 훨씬 여리게 — 어두워질 뿐 실루엣까지 가지 않는다
+    ctx.world.setDim(0.45);
+    for (const p of ctx.players) p.slippery = true;
+    this.cooldown = ctx.players.map(() => 0);
+    this.marks = [];
+
+    const geo = new THREE.BoxGeometry(0.025, 0.55, 0.025);
+    const mat = new THREE.MeshBasicMaterial({ color: 0xcfe0f5, transparent: true, opacity: 0.32 });
+    this.rain = new THREE.InstancedMesh(geo, mat, RainEvent.DROPS);
+    this.drops = [];
+    for (let i = 0; i < RainEvent.DROPS; i++) {
+      this.drops.push({
+        x: (Math.random() - 0.5) * ROOM_W,
+        y: Math.random() * 6,
+        z: (Math.random() - 0.5) * ROOM_D,
+        speed: 9 + Math.random() * 4,
+      });
+    }
+    ctx.world.scene.add(this.rain);
+  }
+
+  tick(ctx: EventCtx, dt: number) {
+    ctx.world.setCurtainWind(0.55); // 텐트 자락이 평소보다 크게 흔들린다
+
+    if (this.rain) {
+      const m = new THREE.Matrix4();
+      for (let i = 0; i < this.drops.length; i++) {
+        const d = this.drops[i];
+        d.y -= d.speed * dt;
+        if (d.y < 0) {
+          d.y = 6;
+          d.x = (Math.random() - 0.5) * ROOM_W;
+          d.z = (Math.random() - 0.5) * ROOM_D;
+        }
+        m.makeTranslation(d.x, d.y, d.z);
+        this.rain.setMatrixAt(i, m);
+      }
+      this.rain.instanceMatrix.needsUpdate = true;
+    }
+
+    // 젖은 발자국 — 미끄러지는 중일 때만 남는다. "지금 밀리고 있다"를 눈으로 보여준다
+    ctx.players.forEach((p, i) => {
+      this.cooldown[i] -= dt;
+      const v = p.body.linvel();
+      if (Math.hypot(v.x, v.z) < 2.4 || this.cooldown[i] > 0) return;
+      this.cooldown[i] = 0.14;
+      this.mark(ctx, p.position.x, p.position.z);
+      if (Math.random() < 0.35) sfx.slip();
+    });
+
+    for (const f of this.marks) f.age += dt;
+    this.marks = this.marks.filter((f) => {
+      const t = f.age / 0.45;
+      (f.mesh.material as THREE.MeshBasicMaterial).opacity = 0.34 * Math.max(0, 1 - t);
+      if (t < 1) return true;
+      ctx.world.scene.remove(f.mesh);
+      return false;
+    });
+  }
+
+  private mark(ctx: EventCtx, x: number, z: number) {
+    const mesh = new THREE.Mesh(
+      new THREE.CircleGeometry(0.24, 12),
+      new THREE.MeshBasicMaterial({
+        color: 0x9fc2e4, transparent: true, opacity: 0.34, depthWrite: false,
+      }),
+    );
+    mesh.rotation.x = -Math.PI / 2;
+    mesh.position.set(x, 0.014, z);
+    ctx.world.scene.add(mesh);
+    this.marks.push({ mesh, age: 0 });
+  }
+
+  end(ctx: EventCtx) {
+    ctx.world.setDim(1);
+    ctx.world.setCurtainWind(0);
+    for (const p of ctx.players) p.slippery = false;
+    if (this.rain) {
+      ctx.world.scene.remove(this.rain);
+      this.rain = null;
+    }
+    for (const f of this.marks) ctx.world.scene.remove(f.mesh);
+    this.marks = [];
+  }
+}
+
 const FACTORIES: Record<string, () => RoundEvent> = {
   wind: () => new WindEvent(),
   rumble: () => new RumbleEvent(),
   blackout: () => new BlackoutEvent(),
+  ember: () => new EmberEvent(),
+  raccoon: () => new RaccoonEvent(),
+  rain: () => new RainEvent(),
 };
 
 /**

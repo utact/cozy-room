@@ -72,6 +72,12 @@ class Sfx {
   tick() { this.tone('square', 880, 880, 0.06, 0.12); }
   buzzer() { this.tone('sawtooth', 240, 200, 0.55, 0.3); this.tone('sawtooth', 302, 250, 0.55, 0.2); }
   gust() { this.noise(0.5, 0.22, 1200); }
+  /** 불티 — 살에 닿는 짧고 날카로운 치직 */
+  sizzle() { this.noise(0.14, 0.3, 3600); this.tone('sawtooth', 900, 260, 0.11, 0.16); }
+  /** 소나기 — 젖은 바닥에서 발이 밀릴 때 쓰윽 */
+  slip() { this.noise(0.2, 0.13, 1900); }
+  /** 너구리 — 놀라서 내는 짧은 깩 소리 */
+  critter() { this.tone('square', 620, 940, 0.08, 0.13); this.tone('square', 880, 520, 0.1, 0.1, 0.07); }
   /** 윗집 층간소음 — 둔탁한 저역 쿵 */
   thump() {
     this.tone('sine', 96, 34, 0.34, 0.42);

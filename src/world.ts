@@ -244,6 +244,14 @@ export class World3D {
       this.track(mesh);
       this.staticBox(f.x, f.hy, f.z, f.hx, f.hy, f.hz);
 
+      // 화로대처럼 스스로 빛나는 가구 — track()이 정리까지 맡으므로 별도 해제가 필요 없다
+      if (f.glow) {
+        const light = this.track(
+          new THREE.PointLight(f.glow.color, f.glow.intensity, f.glow.distance),
+        );
+        light.position.set(f.x, f.glow.y, f.z);
+      }
+
       // 그림자는 항상 -z 방향으로 가구 높이만큼 늘어난다. 그 띠까지 스폰을 막아야
       // 프롭이 가구 뒤에 숨는 일이 생기지 않는다
       const shadow = f.hy * 2;

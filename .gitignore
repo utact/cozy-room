@@ -10,4 +10,5 @@ dist
 server/.env
 .env
 asset-viewer.html
+camping-preview.html
 public/_preview/

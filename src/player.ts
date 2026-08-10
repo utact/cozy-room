@@ -36,6 +36,9 @@ export class Player {
   slippery = false;
   /** 직전 프레임 이동 입력 크기 — 줄다리기 힘 계산용 */
   lastMoveMag = 0;
+  /** 미끄러질 때 몸이 잔여 속도 쪽으로 기우는 각도 (렌더 전용) */
+  private leanX = 0;
+  private leanZ = 0;
   /** 현재 잡기 후보 프롭 위치 (네트워크 동기화용) */
   indicatorPos: { x: number; z: number } | null = null;
   /** 잡기 가능한 프롭 아래 표시되는 링 */
@@ -122,6 +125,16 @@ export class Player {
       true,
     );
 
+    // 미끄러짐 — 가려는 방향과 실제 속도가 어긋난 만큼 몸이 기운다. 수치만 바꾸면
+    // "둔하다"로만 읽히므로, 밀리고 있다는 걸 자세로 보여준다. 물리 바디는 y축 회전만
+    // 허용돼 있어(생성자의 setEnabledRotations) 렌더 레이어에서만 처리한다.
+    const errX = this.slippery ? lv.x - tx : 0;
+    const errZ = this.slippery ? lv.z - tz : 0;
+    const lean = Math.min(1, Math.hypot(errX, errZ) / 3.5) * 0.2;
+    const mag = Math.hypot(errX, errZ) || 1;
+    this.leanX += ((errZ / mag) * lean - this.leanX) * 0.18;
+    this.leanZ += ((-errX / mag) * lean - this.leanZ) * 0.18;
+
     // 조향 — 입력 방향으로 y축 회전 (P 제어)
     if (Math.abs(input.moveX) > 0.01 || Math.abs(input.moveZ) > 0.01) {
       this.targetYaw = Math.atan2(input.moveX, input.moveZ);
@@ -142,6 +155,12 @@ export class Player {
     const r = this.body.rotation();
     this.group.position.set(t.x, t.y, t.z);
     this.group.quaternion.set(r.x, r.y, r.z, r.w);
+    if (Math.abs(this.leanX) > 0.002 || Math.abs(this.leanZ) > 0.002) {
+      // 몸통 회전(y) 뒤에 곱하지 않고 앞에 곱해야 기울기가 월드 기준으로 유지된다
+      this.group.quaternion.premultiply(
+        new THREE.Quaternion().setFromEuler(new THREE.Euler(this.leanX, 0, this.leanZ)),
+      );
+    }
 
     // 캐릭터 애니메이션 — 이동 중이면 걷기, 아니면 대기
     this.visual.update(dt, this.lastMoveMag > 0.05, this.held !== null);

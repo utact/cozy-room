@@ -14,6 +14,15 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import type { PropMeta } from './catalog';
 import { CONCEPTS, type FurniturePiece } from './themes';
 
+/**
+ * 크리처 GLB 목록.
+ *
+ * 너구리는 형태 후보가 둘이다 — `a`는 네 발로 선 자세, `b`는 다리 없는 통짜 블롭.
+ * 어느 쪽을 쓸지 아직 정해지지 않아 둘 다 싣고 `?raccoon=b` 로 바꿔 볼 수 있게 둔다.
+ * 확정되면 진 쪽을 지우고 이 배열을 한 줄로 줄인다.
+ */
+const CREATURE_IDS = ['raccoon-a', 'raccoon-b'];
+
 /** GLB를 카탈로그 치수에 맞추기 위한 목표 최대 변 */
 function targetExtent(meta: PropMeta): number {
   const [sx, sy, sz] = meta.size;
@@ -45,6 +54,7 @@ function normalize(src: THREE.Object3D, extent: number, originAtBottom: boolean)
 export class AssetLibrary {
   private props = new Map<string, THREE.Object3D>();
   private furniture = new Map<string, THREE.Object3D>();
+  private creatures = new Map<string, THREE.Object3D>();
   private textures = new Map<string, THREE.Texture>();
 
   async load(): Promise<void> {
@@ -77,6 +87,7 @@ export class AssetLibrary {
     await Promise.all([
       ...ids.map((id) => loadGlb(`assets/props/${id}.glb`, this.props, id)),
       ...[...furnitureIds].map((id) => loadGlb(`assets/furniture/${id}.glb`, this.furniture, id)),
+      ...CREATURE_IDS.map((id) => loadGlb(`assets/creatures/${id}.glb`, this.creatures, id)),
       ...[...textureIds].map(async (id) => {
         const tex = await texLoader.loadAsync(`assets/textures/${id}.webp`);
         tex.colorSpace = THREE.SRGBColorSpace;
@@ -85,7 +96,7 @@ export class AssetLibrary {
     ]);
 
     console.info(
-      `[assets] 프롭 ${this.props.size} · 가구 ${this.furniture.size} · 텍스처 ${this.textures.size} 로드 완료`,
+      `[assets] 프롭 ${this.props.size} · 가구 ${this.furniture.size} · 크리처 ${this.creatures.size} · 텍스처 ${this.textures.size} 로드 완료`,
     );
   }
 
@@ -103,6 +114,13 @@ export class AssetLibrary {
     const obj = normalize(src, Math.max(piece.hx, piece.hy, piece.hz) * 2, true);
     if (piece.rotY) obj.rotation.y = piece.rotY;
     return obj;
+  }
+
+  /** 목표 높이로 정규화된 크리처 사본. 원점이 바닥면이라 y=0에 두면 땅에 딱 붙는다 */
+  instantiateCreature(id: string, targetHeight: number): THREE.Object3D {
+    const src = this.creatures.get(id);
+    if (!src) throw new Error(`[assets] 크리처 GLB 없음: ${id}`);
+    return normalize(src, targetHeight, true);
   }
 
   texture(id: string): THREE.Texture {

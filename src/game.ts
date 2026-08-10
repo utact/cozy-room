@@ -62,7 +62,7 @@ export class Game {
   private restartRequested = false;
   private reloading = false;
 
-  constructor(container: HTMLElement, assets: AssetLibrary, private characters: CharacterLibrary) {
+  constructor(container: HTMLElement, private assets: AssetLibrary, private characters: CharacterLibrary) {
     this.world = new World3D(container, assets);
     this.props = new PropManager(this.world, assets);
     // 메뉴 화면에도 방이 보여야 하므로 첫 콘셉트를 미리 세워 둔다
@@ -212,6 +212,7 @@ export class Game {
       world: this.world,
       players: this.players,
       props: this.props,
+      assets: this.assets,
       pulse: (text) => this.ui.pulseEvent(text),
     };
   }
